@@ -2,11 +2,14 @@ all: execfuse
 
 CFLAGS=-O2 -ggdb -Wall
 
-execfuse: execfuse.c
-		${CC} ${LDFLAGS} ${CFLAGS} $(shell pkg-config fuse --cflags --libs) execfuse.c -o execfuse
+FILES=execfuse.c chunked_buffer.c execute_script.c
+HEADERS=chunked_buffer.h execute_script.h
 
-static:
-		${CC} -static ${LDFLAGS} ${CFLAGS} execfuse.c $(shell pkg-config fuse --cflags --libs) -lpthread -lrt -ldl  -o execfuse-static
+execfuse: ${FILES} ${HEADERS}
+		${CC} ${LDFLAGS} ${CFLAGS} $(shell pkg-config fuse --cflags --libs) ${FILES} -o execfuse
+
+execfuse-static: ${FILES} ${HEADERS}
+		${CC} -static ${LDFLAGS} ${CFLAGS} ${FILES} $(shell pkg-config fuse --cflags --libs) -lpthread -lrt -ldl  -o execfuse-static
 		
 test:
 		bash test.sh

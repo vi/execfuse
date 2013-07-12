@@ -1,3 +1,4 @@
 *.o
+*_test
 execfuse
 m

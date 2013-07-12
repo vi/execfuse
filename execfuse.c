@@ -16,9 +16,14 @@
 
 char working_directory[4096];
 
+
+
 static int execfuse_getattr(const char *path, struct stat *stbuf)
 {
 	if(!path) return -ENOSYS;
+	
+	
+	
     if(!strcmp(path,"/")) {
         memset(stbuf, 0, sizeof(struct stat));
         stbuf->st_mode = S_IFDIR | 0555;
