@@ -12,18 +12,22 @@
 int execute_script(
                         const char* directory,
 						const char* script_name, 
-						const char*const* prepended_params,
-						const char* param, 
+						const char*const* appended_params,
+						const char*const* params, 
 						read_t stdin_fn, void* stdin_obj,
                         write_t stdout_fn, void* stdout_obj
 						) {
     
 	int ppcount=0;
 	int i;
-	if(prepended_params) {
-		for(i=0; prepended_params[i]; ++i) ++ppcount;	
+	int pcount=0;
+	if(appended_params) {
+		for(i=0; appended_params[i]; ++i) ++ppcount;	
 	}
-	const char** argv = (const char**)malloc((ppcount+3)*sizeof(char*));
+	if(params) {
+		for(i=0; params[i]; ++i) ++pcount;	
+	}
+	const char** argv = (const char**)malloc((ppcount+pcount+2)*sizeof(char*));
 	assert(argv!=NULL);
 	
 	char script_path[4096];
@@ -31,9 +35,9 @@ int execute_script(
 	sprintf(script_path, "%s/%s", directory, script_name);
 
 	argv[0]=script_name;
-	argv[1]=param;
-	for(i=0; i<ppcount; ++i) argv[i+2] = prepended_params[i];
-	argv[ppcount+2]=NULL;
+	for(i=0; i<pcount; ++i) argv[i+1] = params[i];
+	for(i=0; i<ppcount; ++i) argv[i+1+pcount] = appended_params[i];
+	argv[1+ppcount+pcount]=NULL;
 	
 	int child_stdout = -1;
 	int child_stdin = -1;

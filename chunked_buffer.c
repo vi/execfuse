@@ -24,10 +24,12 @@ struct chunked_buffer* chunked_buffer_new(int chunk_size) {
 
 void chunked_buffer_delete(struct chunked_buffer* c) {
     int i;
-    for(i=0; i<c->buffers_capacity; ++i) {
-        free(c->buffers[i]);   
+    if(c->buffers) {
+        for(i=0; i<c->buffers_capacity; ++i) {
+            free(c->buffers[i]);   
+        }
+        free(c->buffers);
     }
-    free(c->buffers);
     free(c);
 }
 

@@ -29,7 +29,8 @@ int main(int argc, char* argv[]) {
     }
     
     // dir script_name addargs firstarg in out
-    int ret = execute_script(argv[1], argv[2], (const char*const*)argv+4, argv[3], 
+
+    int ret = execute_script(argv[1], argv[2], (const char*const*)argv+3, NULL, 
                              stdin_, NULL, stdout_, NULL);
     
     return ret;   

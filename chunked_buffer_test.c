@@ -55,4 +55,6 @@ int main(int argc, char* argv[]) {
     
     chunked_buffer_truncate(cb, 14);
     print_chunked_buffer(cb); print_chunked_buffer1(cb);
+    
+    chunked_buffer_delete(cb);
 }
