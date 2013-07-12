@@ -6,6 +6,9 @@
 #include <signal.h>
 #include <unistd.h>
 #include <errno.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
 
 #include "execute_script.h"
 
@@ -53,15 +56,11 @@ int execute_script(
 	
     sigset_t mask;
     sigemptyset(&mask);
-    sigaddset(&mask, SIGCHLD);
     sigaddset(&mask, SIGPIPE);
-    int signal_fd = signalfd(-1, &mask, SFD_NONBLOCK);
-    assert(signal_fd!=-1);
     sigprocmask(SIG_BLOCK, &mask, NULL);
         
-	int childfd = fork();
-	if(!childfd) {
-	   close(signal_fd);
+	int childpid = fork();
+	if(!childpid) {
 	   if(child_stdout!=-1) {
 	       close(to_be_read);
 	       dup2(child_stdout, 1);
@@ -85,7 +84,7 @@ int execute_script(
 	
     /* Event loop for feeding the script with input data, reading output and reading exit code */
     
-    int maxfd = signal_fd;
+    int maxfd = -1;
     if(to_be_written!=-1 && maxfd<to_be_written) maxfd = to_be_written;
     if(to_be_read!=-1    && maxfd<to_be_read   ) maxfd = to_be_read   ;
     ++maxfd;
@@ -94,14 +93,13 @@ int execute_script(
     fd_set rfds;
     fd_set wfds;
     
-    int exit_code=127;
-    
     for(;;) {
         FD_ZERO(&rfds);
         FD_ZERO(&wfds);
-        FD_SET(signal_fd, &rfds);
         if(to_be_read!=-1) FD_SET(to_be_read, &rfds);
         if(to_be_written!=-1) FD_SET(to_be_written, &wfds);
+        
+        if(to_be_read == -1 && to_be_written == -1) break;
         
         int ret = select(maxfd+1, &rfds, &wfds, NULL, NULL);
         
@@ -123,8 +121,6 @@ int execute_script(
                 if (ret2<ret) {
                     close(to_be_read);
                     to_be_read = -1;
-                } else {
-                    continue; // Don't allow handling of SIGCHLD before reading all the data
                 }
             }
         }
@@ -148,21 +144,14 @@ int execute_script(
                 }
             }
         }
-        
-        if (FD_ISSET(signal_fd, &rfds)) {
-            struct signalfd_siginfo si;
-            if (read(signal_fd, &si, sizeof si)>0) {
-                if(si.ssi_signo == SIGCHLD) {
-                    exit_code = si.ssi_status;
-                    break;
-                }
-            }                
-        }
     }
 	
-    close(signal_fd);
     if(to_be_read!=-1) close(to_be_read);
     if(to_be_written!=-1) close(to_be_read);
+    
+    int status;
+    waitpid(childpid, &status, 0);
+    int exit_code = WEXITSTATUS(status);
     
 	free(argv);
 	return exit_code;
