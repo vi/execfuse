@@ -34,3 +34,4 @@ Limitations:
 
 Filesystem examples:
 * `examples/xmp` - try to be fusexmp_fh
+* `examples/hello` - very simple demo filesystem

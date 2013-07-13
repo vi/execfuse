@@ -1,0 +1,14 @@
+#!/bin/sh
+
+if [ "$1" = "/" ]; then
+    printf 'ino=1 mode=drwxr-xr-x nlink=4 uid=0 gid=0 rdev=0 size=1224 blksize=512 blocks=2 atime=0 mtime=0 ctime=0 .\0'
+    printf 'ino=1 mode=drwxr-xr-x nlink=4 uid=0 gid=0 rdev=0 size=1111 blksize=512 blocks=2 atime=0 mtime=0 ctime=0 ..\0'
+    printf 'ino=1 mode=-rwxr-xr-x nlink=1 uid=0 gid=0 rdev=0 size=1024 blksize=512 blocks=2 atime=0 mtime=0 ctime=0 README\0'
+    if [ -e /tmp/create_me ]; then
+        printf 'ino=1 mode=-rwxr-xr-x nlink=1 uid=0 gid=0 rdev=0 size='
+        find /tmp/create_me -printf '%s'
+        printf ' blksize=512 blocks=2 atime=0 mtime=0 ctime=0 createme\0'
+    fi
+else
+    exit 1
+fi

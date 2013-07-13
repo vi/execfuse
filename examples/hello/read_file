@@ -1,0 +1,10 @@
+#!/bin/sh
+if [ "$1" = "/README" ]; then
+   echo "There are only 2 files here:"
+   echo "README - this file, read only"
+   echo "createme - you can try creating this file"
+elif [ "$1" = "/createme" ]; then
+    cat /tmp/create_me
+else
+    exit 1
+fi
