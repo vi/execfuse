@@ -1,0 +1,5 @@
+#!/bin/sh
+
+# initialize things here
+# EXECFUSE_PID environment variable should be accessible in all operaions
+# $1 is "0"

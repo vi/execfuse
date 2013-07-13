@@ -481,6 +481,14 @@ static int execfuse_utimens(const char *path, const struct timespec ts[2])
 	return -call_script_simple3("utimens", path, b1, b2);
 }
 
+void* execfuse_init(struct fuse_conn_info *conn) {
+	call_script_simple("init", "0");
+	return NULL;	
+}
+void execfuse_destroy (void * arg) {
+	call_script_simple("destroy", "0");	
+}
+
 static struct fuse_operations execfuse_oper = {
 	.getattr	= execfuse_getattr,
 	.readdir	= execfuse_readdir,
@@ -506,6 +514,9 @@ static struct fuse_operations execfuse_oper = {
 	.chmod		= execfuse_chmod,
 	.chown		= execfuse_chown,
 	.utimens    = execfuse_utimens,
+	
+	.init       = execfuse_init,
+	.destroy    = execfuse_destroy,
 	
 	
 	.flag_nullpath_ok = 1,
