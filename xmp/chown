@@ -1,0 +1,2 @@
+#!/bin/sh
+exec chown "$2:$3" "$4$1"

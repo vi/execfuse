@@ -442,6 +442,23 @@ static int execfuse_link(const char *from, const char *to)
 	return -call_script_simple2("link", from, to);
 }
 
+static int execfuse_chmod(const char *path, mode_t mode)
+{
+	char b[16];
+	mode&=07777;
+	sprintf(b, "0%04o", mode);
+	return -call_script_simple2("chmod", path, b);
+}
+
+static int execfuse_chown(const char *path, uid_t uid, gid_t gid)
+{
+	char b1[64];
+	char b2[64];
+	sprintf(b1, "%d", uid);
+	sprintf(b2, "%d", gid);
+	const char* args[] = {path, b1, b2, NULL};
+	return -call_script_ll("chown", args, NULL, NULL, NULL, NULL);
+}
 
 static struct fuse_operations execfuse_oper = {
 	.getattr	= execfuse_getattr,
@@ -465,6 +482,8 @@ static struct fuse_operations execfuse_oper = {
 	.rmdir		= execfuse_rmdir,
 	.rename		= execfuse_rename,
 	.link		= execfuse_link,
+	.chmod		= execfuse_chmod,
+	.chown		= execfuse_chown,
 	
 	
 	.flag_nullpath_ok = 1,
