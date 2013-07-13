@@ -87,7 +87,7 @@ static int execfuse_getattr(const char *path, struct stat *stbuf)
 	if(!path) return -ENOSYS;
     
     struct chunked_buffer* r = call_script_stdout("getattr", path);
-	if(!r) return -EBADF;
+	if(!r) return -ENOENT;
 	
 	char buf[65536];
 	int ret = chunked_buffer_read(r, buf, 65535, 0);
@@ -233,16 +233,26 @@ static int read_the_file(struct myinfo* i, const char* path) {
 		);
 }
 
+static int write_the_file_read(void* ii, char* buf, int len) {
+	struct myinfo* i = (struct myinfo*)ii;
+	int ret = chunked_buffer_read(i->content, buf, len, i->offset_for_sript);
+	i->offset_for_sript += ret;
+	return ret;
+}
+
 static int write_the_file(struct myinfo* i, const char* path) {
+	const char* params[]={path, NULL};
+	i->offset_for_sript = 0;
+	return call_script_ll("write_file"
+			,params
+			,&write_the_file_read, (void*)i
+			,NULL, NULL
+		);
 	return 0;
 }
 
 static int execfuse_open(const char *path, struct fuse_file_info *fi)
 {
-    struct stat stbuf;
-    int ret = execfuse_getattr(path, &stbuf);
-    if(ret) return ret;
-    
     struct myinfo* i = (struct myinfo*)malloc(sizeof *i);
    
     sem_init(&i->sem, 0, 1);
@@ -262,7 +272,21 @@ static int execfuse_open(const char *path, struct fuse_file_info *fi)
 
 static int execfuse_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
-	return execfuse_open(path, fi);
+	int ret = execfuse_open(path, fi);
+	return ret;
+}
+
+static int execfuse_fgetattr(const char *path, struct stat *stbuf,
+			struct fuse_file_info *fi)
+{
+	/* Stub for creating files */
+	
+	(void) path;
+	memset(stbuf, 0, sizeof(*stbuf));
+	stbuf->st_mode = S_IFREG;
+	stbuf->st_blksize = 512;	
+
+	return 0;
 }
 
 static int execfuse_read(const char *path, char *buf, size_t size, off_t offset,
@@ -356,6 +380,7 @@ static struct fuse_operations execfuse_oper = {
 	.readlink   = execfuse_readlink,
 	.open		= execfuse_open,
 	.create		= execfuse_create,
+	.fgetattr	= execfuse_fgetattr,
 	.read		= execfuse_read,
 	.write		= execfuse_write,
 	.release	= execfuse_release,
