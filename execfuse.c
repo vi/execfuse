@@ -18,6 +18,7 @@
 #include "execute_script.h"
 
 char working_directory[4096];
+const char*const* addargs;
 
 
 static int call_script_simple(const char* script_name, const char* param);
@@ -178,7 +179,7 @@ static int call_script_ll(const char* script_name,
 	return execute_script(
 			 working_directory
 			,script_name
-			,NULL
+			,addargs
 			,params
 			,stdin_fn, stdin_obj
 			,stdout_fn, stdout_obj
@@ -525,8 +526,18 @@ static struct fuse_operations execfuse_oper = {
 int main(int argc, char *argv[])
 {
     if(argc<3) {
-        fprintf(stderr, "Usage: execfuse directory mountpoint [FUSE options]\n");
+        fprintf(stderr, "Usage: execfuse scripts_directory mountpoint [FUSE options] [-- additional arguments]\n");
         return 1;
+    }
+    
+    int i;
+    for(i=3; i<argc; ++i) {
+    	if(!strcmp(argv[i], "--")) {
+    		addargs = (const char**)argv+i+1;
+    		argv[i]=NULL;
+    		argc=i;
+    		break;
+    	}
     }
     
     int cd = open(".", O_DIRECTORY);
