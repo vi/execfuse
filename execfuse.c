@@ -373,10 +373,31 @@ static int execfuse_release(const char *path, struct fuse_file_info *fi)
 	return -ret;
 }
 
+static int execfuse_ftruncate(const char *path, off_t size,
+			 struct fuse_file_info *fi)
+{	
+	struct myinfo* i = (struct myinfo*)(uintptr_t)  fi->fh;
+	if(!i) return -ENOSYS;
+	
+	if (i->readonly || i->failed) {
+		return -EBADF;
+	}
+	
+    sem_wait(&i->sem);
+	
+	int ret = 0;
+	
+	chunked_buffer_truncate(i->content, size);
+	
+    sem_post(&i->sem);
+	return ret;
+}
 
 static int execfuse_truncate(const char *path, off_t size)
 {
-	return 0;
+	char b[256];
+	sprintf(b, "%lld", size);
+	return -call_script_simple2("truncate", path, b);
 }
 
 
@@ -431,6 +452,7 @@ static struct fuse_operations execfuse_oper = {
 	.fgetattr	= execfuse_fgetattr,
 	.read		= execfuse_read,
 	.write		= execfuse_write,
+	.ftruncate  = execfuse_ftruncate,
 	.release	= execfuse_release,
 	
 	.truncate  = execfuse_truncate,

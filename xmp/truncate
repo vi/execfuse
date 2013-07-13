@@ -1,0 +1,2 @@
+#!/bin/sh
+exec truncate -s "$2" "$3$1"
