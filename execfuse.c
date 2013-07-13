@@ -23,25 +23,19 @@ char working_directory[4096];
 static int call_script_simple(const char* script_name, const char* param);
 static struct chunked_buffer* call_script_stdout(const char* script_name, const char* param);
 
-static int execfuse_getattr(const char *path, struct stat *stbuf)
-{
-	if(!path) return -ENOSYS;
-    
-    struct chunked_buffer* r = call_script_stdout("getattr", path);
-	if(!r) return -EBADF;
+
+
+// "ino=2 mode=drwxr-xr-x nlink=35 uid=0 gid=0 rdev=0 size=1224 blksize=512 blocks=2 atime=1365035428.0000000000 mtime=1368450727.0000000000 ctime=1368450727.0000000000 filename\0"
+// find / -maxdepth 0 -printf 'ino=%i mode=%M nlink=%n uid=%U gid=%G rdev=0 size=%s blksize=512 blocks=%b atime=%A@ mtime=%T@ ctime=%C@ %f\0'
 	
-	char buf[65536];
-	int ret = chunked_buffer_read(r, buf, 65536, 0);
-	chunked_buffer_delete(r);
-	
-	// ino=2 mode=drwxr-xr-x nlink=35 uid=0 gid=0 rdev=0 size=1224 blksize=512 blocks=2 atime=1365035428.0000000000 mtime=1368450727.0000000000 ctime=1368450727.0000000000
-	// find / -maxdepth 0 -printf 'ino=%i mode=%M nlink=%n uid=%U gid=%G rdev=0 size=%s blksize=512 blocks=%b atime=%A@ mtime=%T@ ctime=%C@\n'
-	
+static int scanstat(const char* str, struct stat *stbuf) {
 	char mode_ox, mode_ow, mode_or, mode_gx, mode_gw, mode_gr, mode_ux, mode_uw, mode_ur, mode;
 	double atime, mtime, ctime;
+	int l;
 	
-	ret = sscanf(buf, "ino=%lli mode=%c%c%c%c%c%c%c%c%c%c nlink=%i uid=%i gid=%i "
-		"rdev=%lli size=%lli blksize=%li blocks=%lli atime=%lf mtime=%lf ctime=%lf"
+	int ret;
+	ret = sscanf(str, "ino=%lli mode=%c%c%c%c%c%c%c%c%c%c nlink=%i uid=%i gid=%i "
+		"rdev=%lli size=%lli blksize=%li blocks=%lli atime=%lf mtime=%lf ctime=%lf %n"
 	     ,&stbuf->st_ino
 	     ,&mode, &mode_ur, &mode_uw, &mode_ux, &mode_gr, &mode_gw, &mode_gx, &mode_or, &mode_ow, &mode_ox
 	     ,&stbuf->st_nlink
@@ -52,10 +46,11 @@ static int execfuse_getattr(const char *path, struct stat *stbuf)
 	     ,&stbuf->st_blksize
 	     ,&stbuf->st_blocks
 	     ,&atime, &mtime, &ctime
+	     ,&l
 	 	);
 	
 	if(ret!= 21) {
-		return -EINVAL;
+		return 0;
 	}
 	
 	stbuf->st_ctime = ctime;
@@ -84,6 +79,26 @@ static int execfuse_getattr(const char *path, struct stat *stbuf)
 	if (mode_ox == 't') stbuf->st_mode |= S_ISVTX;
 	if (mode_ux == 's') stbuf->st_mode |= S_ISUID;
 	if (mode_gx == 's') stbuf->st_mode |= S_ISGID;
+	return l;
+}
+
+static int execfuse_getattr(const char *path, struct stat *stbuf)
+{
+	if(!path) return -ENOSYS;
+    
+    struct chunked_buffer* r = call_script_stdout("getattr", path);
+	if(!r) return -EBADF;
+	
+	char buf[65536];
+	int ret = chunked_buffer_read(r, buf, 65535, 0);
+	buf[ret]=0;
+	chunked_buffer_delete(r);
+	
+	
+	ret = scanstat(buf, stbuf);
+	if (!ret) {		
+		return -EINVAL;
+	}
 	
 	return 0;
 }
@@ -91,32 +106,37 @@ static int execfuse_getattr(const char *path, struct stat *stbuf)
 
 static int execfuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 		       off_t offset, struct fuse_file_info *fi) {
-    
-	DIR *dp;
-	struct dirent *de;
 
 	(void) offset;
 	(void) fi;
 
-	dp = opendir(working_directory);
-	if (dp == NULL)
-		return -errno;
+	if(!path) return -ENOSYS;
+    
+    struct chunked_buffer* r = call_script_stdout("readdir", path);
+	if(!r) return -EBADF;
+	
+	long long int offset_ = 0;
 
-	while ((de = readdir(dp)) != NULL) {
-		struct stat st;
-		memset(&st, 0, sizeof(st));
-		st.st_ino = de->d_ino;
-		st.st_mode = de->d_type << 12;
+	for(;;) {
+		char buf_[65536];
+		int ret = chunked_buffer_read(r, buf_, 65535, offset_);
+		buf_[ret]=0;
 		
-		size_t l = strlen(de->d_name);
-		if(!strncasecmp(de->d_name+l-4, ".dsc", 4)) {
-		    de->d_name[l-4]=0; // trim .dsc
-    		if (filler(buf, de->d_name, &st, 0))
-    			break;
+		struct stat st;
+		int l = scanstat(buf_, &st);
+		if(l==0) break;		
+		
+		const char* filename = buf_+l;
+		
+		if (filler(buf, filename, &st, 0)) {
+			break;
 		}
+		
+		char* z = strchr(buf_+l, 0);
+		if(!z) break;
+		offset_ += (z-buf_+1);
 	}
-
-	closedir(dp);
+	
 	return 0;
 }
 

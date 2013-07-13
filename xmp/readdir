@@ -1,0 +1,2 @@
+#!/bin/sh
+exec find "$2$1" -mindepth 1 -maxdepth 1 -printf 'ino=%i mode=%M nlink=%n uid=%U gid=%G rdev=0 size=%s blksize=512 blocks=%b atime=%A@ mtime=%T@ ctime=%C@ %f\0'

@@ -1,2 +1,2 @@
 #!/bin/sh
-exec cat "$1"
+exec cat "$2$1"
