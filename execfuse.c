@@ -21,6 +21,7 @@ char working_directory[4096];
 
 
 static int call_script_simple(const char* script_name, const char* param);
+static int call_script_simple2(const char* script_name, const char* param1, const char* param2);
 static struct chunked_buffer* call_script_stdout(const char* script_name, const char* param);
 
 
@@ -184,6 +185,10 @@ static int call_script_ll(const char* script_name,
 
 static int call_script_simple(const char* script_name, const char* param) {
 	const char* params[]={param, NULL};
+	return call_script_ll(script_name, params, NULL, NULL, NULL, NULL);
+}
+static int call_script_simple2(const char* script_name, const char* param1, const char* param2) {
+	const char* params[]={param1, param2, NULL};
 	return call_script_ll(script_name, params, NULL, NULL, NULL, NULL);
 }
 
@@ -374,6 +379,49 @@ static int execfuse_truncate(const char *path, off_t size)
 	return 0;
 }
 
+
+static int execfuse_mknod(const char *path, mode_t mode, dev_t rdev)
+{
+	if (S_ISFIFO(mode)) {
+		return -call_script_simple("mkfifo", path);
+	} else {
+		char b[256];
+		sprintf(b, "0x%016llx", rdev);
+		return -call_script_simple2("mknod", path, b);
+	}
+}
+
+static int execfuse_mkdir(const char *path, mode_t mode)
+{
+	return -call_script_simple("mkdir", path);
+}
+
+static int execfuse_unlink(const char *path)
+{
+	return -call_script_simple("unlink", path);
+}
+
+static int execfuse_rmdir(const char *path)
+{
+	return -call_script_simple("rmdir", path);
+}
+
+static int execfuse_symlink(const char *from, const char *to)
+{
+	return -call_script_simple2("symlink", from, to);
+}
+
+static int execfuse_rename(const char *from, const char *to)
+{
+	return -call_script_simple2("rename", from, to);
+}
+
+static int execfuse_link(const char *from, const char *to)
+{
+	return -call_script_simple2("link", from, to);
+}
+
+
 static struct fuse_operations execfuse_oper = {
 	.getattr	= execfuse_getattr,
 	.readdir	= execfuse_readdir,
@@ -386,6 +434,15 @@ static struct fuse_operations execfuse_oper = {
 	.release	= execfuse_release,
 	
 	.truncate  = execfuse_truncate,
+	
+	
+	.mknod		= execfuse_mknod,
+	.mkdir		= execfuse_mkdir,
+	.symlink	= execfuse_symlink,
+	.unlink		= execfuse_unlink,
+	.rmdir		= execfuse_rmdir,
+	.rename		= execfuse_rename,
+	.link		= execfuse_link,
 	
 	
 	.flag_nullpath_ok = 1,
