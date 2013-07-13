@@ -1,0 +1,3 @@
+#!/bin/sh
+#readlink "$2$1" | tr '\n' '\0'
+exec find "$2$1" -maxdepth 0 -printf '%l'

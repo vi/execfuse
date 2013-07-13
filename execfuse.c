@@ -140,6 +140,21 @@ static int execfuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	return 0;
 }
 
+static int execfuse_readlink(const char *path, char *buf, size_t size)
+{
+    struct chunked_buffer* r = call_script_stdout("readlink", path);
+	if(!r) return -EBADF;
+	
+	int size_to_copy = chunked_buffer_getlen(r);
+	if(size_to_copy>size-1) size_to_copy = size-1;
+	
+	chunked_buffer_read(r, buf, size_to_copy, 0);
+	
+	buf[size_to_copy]=0;
+	
+	return 0;
+}
+
 struct myinfo {
     sem_t sem;
     unsigned char *tmpbuf;
@@ -338,6 +353,7 @@ static int execfuse_truncate(const char *path, off_t size)
 static struct fuse_operations execfuse_oper = {
 	.getattr	= execfuse_getattr,
 	.readdir	= execfuse_readdir,
+	.readlink   = execfuse_readlink,
 	.open		= execfuse_open,
 	.create		= execfuse_create,
 	.read		= execfuse_read,
