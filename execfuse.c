@@ -17,6 +17,8 @@
 #include "chunked_buffer.h"
 #include "execute_script.h"
 
+#define SCRIPT_API_VERSION "0"
+
 char working_directory[4096];
 const char*const* addargs;
 
@@ -483,11 +485,11 @@ static int execfuse_utimens(const char *path, const struct timespec ts[2])
 }
 
 void* execfuse_init(struct fuse_conn_info *conn) {
-    call_script_simple("init", "0");
+    call_script_simple("init", SCRIPT_API_VERSION);
     return NULL;    
 }
 void execfuse_destroy (void * arg) {
-    call_script_simple("destroy", "0");    
+    call_script_simple("destroy", SCRIPT_API_VERSION);    
 }
 
 static struct fuse_operations execfuse_oper = {
@@ -553,6 +555,9 @@ int main(int argc, char *argv[])
         sprintf(buf, "%d", getpid());
         setenv("EXECFUSE_PID", buf, 1);
     }
+    
+    int ret = call_script_simple("check_args", SCRIPT_API_VERSION);
+    if(ret && ret!=ENOSYS) return ret;
     
     return fuse_main(argc-1, argv+1, &execfuse_oper, NULL);
 }

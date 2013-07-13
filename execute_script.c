@@ -71,7 +71,7 @@ int execute_script(
 	       close(child_stdin);
 	   }
 	   execv(script_path, (char**)argv);
-	   _exit(127);
+	   _exit(ENOSYS);
 	}
 	
     if(child_stdout!=-1) {

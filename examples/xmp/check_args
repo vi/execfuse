@@ -1,0 +1,8 @@
+#!/bin/sh
+
+# called even before "init"
+# $1 is "0" - version of execfuse
+# $2... are arguments passed after "--" to execfuse, if any
+# failure here  (except of code ENOSYS) aborts execfuse before calling fuse_init
+
+exit 0
