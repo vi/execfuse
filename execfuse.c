@@ -537,5 +537,11 @@ int main(int argc, char *argv[])
     getcwd(working_directory, 4096);
     fchdir(cd);
     
+    {
+    	char buf[64];
+    	sprintf(buf, "%d", getpid());
+    	setenv("EXECFUSE_PID", buf, 1);
+    }
+    
 	return fuse_main(argc-1, argv+1, &execfuse_oper, NULL);
 }
