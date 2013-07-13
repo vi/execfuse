@@ -35,3 +35,4 @@ Limitations:
 Filesystem examples:
 * `examples/xmp` - try to be fusexmp_fh
 * `examples/hello` - very simple demo filesystem
+* `examples/video_frames` - extract frames from video as `*.ppm` files and enumerate keyframes (using ffmpeg)
