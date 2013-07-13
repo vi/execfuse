@@ -1,2 +1,2 @@
 #!/bin/sh
-echo qqq
+exec cat "$1"

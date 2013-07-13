@@ -20,23 +20,71 @@
 char working_directory[4096];
 
 
+static int call_script_simple(const char* script_name, const char* param);
+static struct chunked_buffer* call_script_stdout(const char* script_name, const char* param);
 
 static int execfuse_getattr(const char *path, struct stat *stbuf)
 {
 	if(!path) return -ENOSYS;
-	
-	
-	
-    if(!strcmp(path,"/")) {
-        memset(stbuf, 0, sizeof(struct stat));
-        stbuf->st_mode = S_IFDIR | 0555;
-        stbuf->st_nlink = 1;
-        return 0;   
-    }
     
-    stbuf->st_size = 44444;
-    stbuf->st_blocks = stbuf->st_size / 512;
-    stbuf->st_mode = S_IFREG | 0666;
+    struct chunked_buffer* r = call_script_stdout("getattr", path);
+	if(!r) return -EBADF;
+	
+	char buf[65536];
+	int ret = chunked_buffer_read(r, buf, 65536, 0);
+	chunked_buffer_delete(r);
+	
+	// ino=2 mode=drwxr-xr-x nlink=35 uid=0 gid=0 rdev=0 size=1224 blksize=512 blocks=2 atime=1365035428.0000000000 mtime=1368450727.0000000000 ctime=1368450727.0000000000
+	// find / -maxdepth 0 -printf 'ino=%i mode=%M nlink=%n uid=%U gid=%G rdev=0 size=%s blksize=512 blocks=%b atime=%A@ mtime=%T@ ctime=%C@\n'
+	
+	char mode_ox, mode_ow, mode_or, mode_gx, mode_gw, mode_gr, mode_ux, mode_uw, mode_ur, mode;
+	double atime, mtime, ctime;
+	
+	ret = sscanf(buf, "ino=%lli mode=%c%c%c%c%c%c%c%c%c%c nlink=%i uid=%i gid=%i "
+		"rdev=%lli size=%lli blksize=%li blocks=%lli atime=%lf mtime=%lf ctime=%lf"
+	     ,&stbuf->st_ino
+	     ,&mode, &mode_ur, &mode_uw, &mode_ux, &mode_gr, &mode_gw, &mode_gx, &mode_or, &mode_ow, &mode_ox
+	     ,&stbuf->st_nlink
+	     ,&stbuf->st_uid
+	     ,&stbuf->st_gid
+	     ,&stbuf->st_rdev
+	     ,&stbuf->st_size
+	     ,&stbuf->st_blksize
+	     ,&stbuf->st_blocks
+	     ,&atime, &mtime, &ctime
+	 	);
+	
+	if(ret!= 21) {
+		return -EINVAL;
+	}
+	
+	stbuf->st_ctime = ctime;
+	stbuf->st_mtime = mtime;
+	stbuf->st_atime = atime;
+	stbuf->st_mode = 0
+		| ((mode_ox == '-') ? 0 : S_IXOTH)
+		| ((mode_ow == '-') ? 0 : S_IWOTH)
+		| ((mode_or == '-') ? 0 : S_IROTH)
+		| ((mode_gx == '-') ? 0 : S_IXGRP)
+		| ((mode_gw == '-') ? 0 : S_IWGRP)
+		| ((mode_gr == '-') ? 0 : S_IRGRP)
+		| ((mode_ux == '-') ? 0 : S_IXUSR)
+		| ((mode_uw == '-') ? 0 : S_IWUSR)
+		| ((mode_ur == '-') ? 0 : S_IRUSR)
+		;
+	switch(mode) {
+		case '-': stbuf->st_mode |= S_IFREG; break;	
+		case 'd': stbuf->st_mode |= S_IFDIR; break;	
+		case 'p': stbuf->st_mode |= S_IFIFO; break;	
+		case 'c': stbuf->st_mode |= S_IFCHR; break;	
+		case 'b': stbuf->st_mode |= S_IFBLK; break;	
+		case 'l': stbuf->st_mode |= S_IFLNK; break;	
+		case 's': stbuf->st_mode |= S_IFSOCK; break;	
+	}
+	if (mode_ox == 't') stbuf->st_mode |= S_ISVTX;
+	if (mode_ux == 's') stbuf->st_mode |= S_ISUID;
+	if (mode_gx == 's') stbuf->st_mode |= S_ISGID;
+	
 	return 0;
 }
 
@@ -85,19 +133,65 @@ struct myinfo {
 };
 
 
-int read_the_file_write(void* ii, const char* buf, int len) {
+static int call_script_ll(const char* script_name, 
+						const char*const* params, 
+						read_t stdin_fn, void* stdin_obj,
+                        write_t stdout_fn, void* stdout_obj) {
+	return execute_script(
+			 working_directory
+			,script_name
+			,NULL
+			,params
+			,stdin_fn, stdin_obj
+			,stdout_fn, stdout_obj
+		);
+}
+
+static int call_script_simple(const char* script_name, const char* param) {
+	const char* params[]={param, NULL};
+	return call_script_ll(script_name, params, NULL, NULL, NULL, NULL);
+}
+
+struct chuncked_buffer_with_cursor {
+	struct chunked_buffer *content;
+	long long int offset;
+};
+
+static int call_script_stdout_write(void* ii, const char* buf, int len) {
+	struct chuncked_buffer_with_cursor* i = (struct chuncked_buffer_with_cursor*)ii;
+	chunked_buffer_write(i->content, buf, len, i->offset);
+	i->offset += len;
+	return len;
+}
+
+static struct chunked_buffer* call_script_stdout(const char* script_name, const char* param) {
+	const char* params[]={param, NULL};
+	struct chuncked_buffer_with_cursor i;
+	i.offset = 0;
+	i.content = chunked_buffer_new(4096);
+	int ret = call_script_ll(script_name
+			,params
+			,NULL, NULL
+			,&call_script_stdout_write, (void*)&i
+		);
+	if(ret>0){
+		chunked_buffer_delete(i.content);
+		return NULL;
+	}
+	return i.content;
+}
+
+static int read_the_file_write(void* ii, const char* buf, int len) {
 	struct myinfo* i = (struct myinfo*)ii;
 	chunked_buffer_write(i->content, buf, len, i->offset_for_sript);
 	i->offset_for_sript += len;
 	return len;
 }
+
 static int read_the_file(struct myinfo* i, const char* path) {
 	const char* params[]={path, NULL};
 	i->offset_for_sript = 0;
-	return execute_script(
-			 working_directory
-			,"read_file"
-			,NULL
+	return call_script_ll("read_file"
 			,params
 			,NULL, NULL
 			,&read_the_file_write, (void*)i

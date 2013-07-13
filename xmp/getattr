@@ -1,0 +1,3 @@
+#!/bin/sh
+#echo 'ino=2 mode=drwxr-xr-x nlink=35 uid=0 gid=0 rdev=0 size=1224 blksize=512 blocks=2 atime=1365035428.0000000000 mtime=1368450727.0000000000 ctime=1368450727.0000000000'
+exec find "$1" -maxdepth 0 -printf 'ino=%i mode=%M nlink=%n uid=%U gid=%G rdev=0 size=%s blksize=512 blocks=%b atime=%A@ mtime=%T@ ctime=%C@\n'
