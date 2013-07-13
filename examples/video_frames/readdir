@@ -1,0 +1,36 @@
+#!/bin/bash
+#exec find "$2$1" -mindepth 1 -maxdepth 1 -printf 'ino=%i mode=%M nlink=%n uid=%U gid=%G rdev=0 size=%s blksize=512 blocks=%b atime=%A@ mtime=%T@ ctime=%C@ %f\0'
+
+if [ "$1" != "/" ]; then
+    exit 2 # ENOENT
+fi
+
+VIDEO="$2"
+true ${FFMPEG:="ffmpeg"}
+true ${TMPDIR:="/tmp"}
+
+KFL="$TMPDIR/video_frames.$EXECFUSE_PID/keyframeslist"
+VFS=$(<"$TMPDIR/video_frames.$EXECFUSE_PID/videoframesize")
+if [ -z "$VFS" ]; then VFS=20000000; fi
+
+if [ -e "$KFL" ]; then
+    cat "$KFL"
+    exit 0;
+fi
+
+# [matroska @ 0x921cc60] Writing block at offset 1057104, size 6747, pts 21655, dts 21655, duration 33, flags 128
+
+KEYFRAMES="$(
+    ffmpeg -fdebug ts -i "$VIDEO" -vcodec copy -an -f matroska -copyts -y /dev/null 2>&1 | \
+    grep 'Writing block.*flags 128' | \
+    grep -o 'pts [0-9]*' | \
+    awk '{print $2/1000.0}' \
+    )"
+
+for i in $KEYFRAMES; do
+    printf 'ino=1 mode=-rwxr-xr-x nlink=1 uid=0 gid=0 rdev=0 size=%d' "$VFS"
+    printf ' blksize=512 blocks=2 atime=0 mtime=0 ctime=0 %016.3f.ppm\0' $i
+done > "$KFL"
+    
+cat "$KFL"
+exit 0

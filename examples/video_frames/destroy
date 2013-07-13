@@ -1,0 +1,4 @@
+#!/bin/sh
+
+true ${TMPDIR:="/tmp"}
+rm -Rf "$TMPDIR/video_frames.$EXECFUSE_PID"

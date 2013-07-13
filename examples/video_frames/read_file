@@ -1,0 +1,44 @@
+#!/bin/sh
+
+
+VIDEO="$2"
+true ${FFMPEG:="ffmpeg"}
+true ${TMPDIR:="/tmp"}
+
+TS="$1"        # /5.44.ppm
+TS="${TS/\//}" # 5.44.ppm
+TS="${TS/.ppm/}" # 5.44
+
+CFP="$TMPDIR/video_frames.$EXECFUSE_PID/cachedframe"
+
+if [ -e "$CFP.$TS.ppm" ]; then
+    date +%s > "$CFP.$TS.atime"
+    cat "$CFP.$TS.ppm"
+    exit 0;
+fi
+
+ffmpeg -ss "$TS" -i "$VIDEO" -vframes 1 -an -f image2 -y "$CFP.$TS.ppm"
+
+date +%s > "$CFP.$TS.atime"
+cat "$CFP.$TS.ppm"
+
+
+CACHEDCOUNT=$(find "$TMPDIR/video_frames.$EXECFUSE_PID/" -name "*.ppm"  | wc -l)
+
+if [ "$CACHEDCOUNT" -gt 20 ]; then
+    TO_BE_DELETED=`
+        (cd "$TMPDIR/video_frames.$EXECFUSE_PID/"; 
+        grep '' $(find . -name '*.atime' -type f -printf '%f\n')
+        ) | # cachedframe.000000000015.749.atime:1373718874
+        sed 's!^cachedframe.!!; s!\.atime!!; s!\(.*\):\(.*\)!\2 \1!' | 
+        # 1373718874 000000000015.749
+        sort -rn | 
+        tail -n +10 |  # choose 10 oldest files
+        awk '{print $2}'`;
+    for i in $TO_BE_DELETED; do
+        rm -f "$CFP.$i.ppm"
+        rm -f "$CFP.$i.atime"
+    done
+fi
+
+exit 0
