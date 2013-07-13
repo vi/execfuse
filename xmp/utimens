@@ -1,0 +1,8 @@
+#!/bin/sh
+PATH="$1"; shift
+ATIME="$1"; shift # fractional seconds
+MTIME="$1"; shift # fractional seconds
+
+# let's just ignore the dates
+
+exec /usr/bin/touch "$1$PATH"

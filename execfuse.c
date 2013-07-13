@@ -22,6 +22,8 @@ char working_directory[4096];
 
 static int call_script_simple(const char* script_name, const char* param);
 static int call_script_simple2(const char* script_name, const char* param1, const char* param2);
+static int call_script_simple3(const char* script_name, const char* param1,
+							   const char* param2, const char* param3);
 static struct chunked_buffer* call_script_stdout(const char* script_name, const char* param);
 
 
@@ -189,6 +191,11 @@ static int call_script_simple(const char* script_name, const char* param) {
 }
 static int call_script_simple2(const char* script_name, const char* param1, const char* param2) {
 	const char* params[]={param1, param2, NULL};
+	return call_script_ll(script_name, params, NULL, NULL, NULL, NULL);
+}
+static int call_script_simple3(const char* script_name, const char* param1, 
+							   const char* param2, const char* param3) {
+	const char* params[]={param1, param2, param3, NULL};
 	return call_script_ll(script_name, params, NULL, NULL, NULL, NULL);
 }
 
@@ -456,8 +463,22 @@ static int execfuse_chown(const char *path, uid_t uid, gid_t gid)
 	char b2[64];
 	sprintf(b1, "%d", uid);
 	sprintf(b2, "%d", gid);
-	const char* args[] = {path, b1, b2, NULL};
-	return -call_script_ll("chown", args, NULL, NULL, NULL, NULL);
+	return -call_script_simple3("chown", path, b1, b2);
+}
+
+static int execfuse_utimens(const char *path, const struct timespec ts[2])
+{
+	double atime;
+	double mtime;
+	
+	atime = ts[0].tv_sec + ts[0].tv_nsec*0.000000001;
+	mtime = ts[1].tv_sec + ts[1].tv_nsec*0.000000001;
+	
+	char b1[64];
+	char b2[64];
+	sprintf(b1, "%lg", atime);
+	sprintf(b2, "%lg", mtime);
+	return -call_script_simple3("utimens", path, b1, b2);
 }
 
 static struct fuse_operations execfuse_oper = {
@@ -484,6 +505,7 @@ static struct fuse_operations execfuse_oper = {
 	.link		= execfuse_link,
 	.chmod		= execfuse_chmod,
 	.chown		= execfuse_chown,
+	.utimens    = execfuse_utimens,
 	
 	
 	.flag_nullpath_ok = 1,
