@@ -1,0 +1,6 @@
+language: c
+install:
+  # vim-common is for xxd
+- sudo apt-get install -qq libfuse-dev pkg-config fuse
+- make
+script: ./tests.sh
