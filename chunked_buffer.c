@@ -107,8 +107,7 @@ static int chunked_buffer_read1(struct chunked_buffer* c, char* buf, int len, lo
     
     if(!c->buffers) {
         return_zero = 1;
-    }
-    
+    } else
     if (!c->buffers[chunk_number]) {
         return_zero = 1;
     }

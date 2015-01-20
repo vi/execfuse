@@ -543,6 +543,7 @@ int main(int argc, char *argv[])
     }
     
     int cd = open(".", O_DIRECTORY);
+    if (cd == -1) {perror("open"); return 2; }
     if(chdir(argv[1])) {
         perror("chdir");
         return 2;
