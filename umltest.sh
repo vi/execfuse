@@ -12,15 +12,12 @@ cat > umltest.inner.sh <<EOF
    ./tests.sh
    echo Success
 )
-if [ \$? = 0 ]; then
-    # proper shutdown
-    halt -f
-else
-    # crash UML
-    exit 1
-fi
+echo "\$?" > "$CURDIR"/umltest.status
+halt -f
 EOF
 
 chmod +x umltest.inner.sh
 
-exec /usr/bin/linux.uml init=`pwd`/umltest.inner.sh rootfstype=hostfs rw
+/usr/bin/linux.uml init=`pwd`/umltest.inner.sh rootfstype=hostfs rw
+
+exit $(<umltest.status)
