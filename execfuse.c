@@ -560,5 +560,9 @@ int main(int argc, char *argv[])
     int ret = call_script_simple("check_args", SCRIPT_API_VERSION);
     if(ret && ret!=ENOSYS) return ret;
     
-    return fuse_main(argc-1, argv+1, &execfuse_oper, NULL);
+    
+    struct fuse_args args = FUSE_ARGS_INIT(argc-1, argv+1);
+    fuse_opt_parse(&args, NULL, NULL, NULL);
+    fuse_opt_add_arg(&args, "-odirect_io");
+    return fuse_main(args.argc, args.argv, &execfuse_oper, NULL);
 }
