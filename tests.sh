@@ -5,7 +5,12 @@ set -x
 
 mkdir -p m
 ./execfuse examples/xmp m
-trap 'fusermount -u m' EXIT
+
+if [[ `id -u` == 0 ]]; then
+    trap 'umount m' EXIT
+else
+    trap 'fusermount -u m' EXIT
+fi
 
 
 test -x m/`pwd`/execfuse
