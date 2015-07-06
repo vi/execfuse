@@ -6,7 +6,7 @@ set -x
 mkdir -p m
 ./execfuse examples/xmp m
 
-if [[ $UID == 0 ]]; then
+if [[ `id -i` == 0 ]]; then
     trap 'umount m' EXIT
 else
     trap 'fusermount -u m' EXIT
