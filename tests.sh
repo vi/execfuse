@@ -5,7 +5,12 @@ set -x
 
 mkdir -p m
 ./execfuse examples/xmp m
-trap 'strace -f /usr/bin/fusermount -u m' EXIT
+
+if [[ $UID == 0 ]]; then
+    trap 'umount m' EXIT
+else
+    trap 'fusermount -u m' EXIT
+fi
 
 
 test -x m/`pwd`/execfuse
