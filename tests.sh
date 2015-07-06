@@ -5,7 +5,7 @@ set -x
 
 mkdir -p m
 ./execfuse examples/xmp m
-trap 'strace /usr/bin/fusermount -u m' EXIT
+trap 'strace -f /usr/bin/fusermount -u m' EXIT
 
 
 test -x m/`pwd`/execfuse
