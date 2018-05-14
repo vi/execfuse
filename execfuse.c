@@ -173,6 +173,19 @@ struct myinfo {
     int failed;
 };
 
+void setenv_mountpoint(int argc, char** argv)
+{
+    char* mp_buf = malloc(4096);
+    if(mp_buf == NULL) abort();
+    struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
+    if(fuse_parse_cmdline(&args, &mp_buf, NULL, NULL)!=0) abort();
+    char* mountpoint;
+    if(asprintf(&mountpoint, "%s", mp_buf)==-1) abort();
+    free(mp_buf);
+    setenv("EXECFUSE_MOUNTPOINT", mountpoint, 1);
+    free(mountpoint);
+}
+
 
 static int call_script_ll(const char* script_name, 
                         const char*const* params, 
@@ -561,6 +574,7 @@ int main(int argc, char *argv[])
     if(ret && ret!=ENOSYS) return ret;
     
     
+    setenv_mountpoint(argc-1, argv+1);
     struct fuse_args args = FUSE_ARGS_INIT(argc-1, argv+1);
     fuse_opt_parse(&args, NULL, NULL, NULL);
     fuse_opt_add_arg(&args, "-odirect_io");
