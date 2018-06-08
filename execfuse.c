@@ -279,7 +279,7 @@ static int write_the_file(struct myinfo* i, const char* path) {
     return 0;
 }
 
-static int execfuse_open(const char *path, struct fuse_file_info *fi)
+static int execfuse_open_impl(const char *path, struct fuse_file_info *fi)
 {
     struct myinfo* i = (struct myinfo*)malloc(sizeof *i);
    
@@ -298,9 +298,28 @@ static int execfuse_open(const char *path, struct fuse_file_info *fi)
     return 0;
 }
 
+static int execfuse_open(const char *path, struct fuse_file_info *fi)
+{
+    {
+        int sr = call_script_simple("open", path);
+        if (sr != 0 && sr != ENOSYS) {
+            return -sr;
+        }
+    }
+    return execfuse_open_impl(path, fi);
+}
+
 static int execfuse_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
-    int ret = execfuse_open(path, fi);
+    {
+        char mode_s[16];
+        sprintf(mode_s, "%o", (int)mode);
+        int sr = call_script_simple2("create", path, mode_s);
+        if (sr != 0 && sr != ENOSYS) {
+            return -sr;
+        }
+    }
+    int ret = execfuse_open_impl(path, fi);
     return ret;
 }
 
