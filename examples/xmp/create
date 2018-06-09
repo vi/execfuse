@@ -1,0 +1,4 @@
+#!/bin/sh
+# Optional script: if not implemented, write_file will be called for any file
+# Arguments: path mode
+exit 0

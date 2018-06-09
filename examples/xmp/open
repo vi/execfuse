@@ -1,0 +1,4 @@
+#!/bin/sh
+# Optional script: if not implemented, read_file will be called for any file
+# Arguments: path
+exit 0

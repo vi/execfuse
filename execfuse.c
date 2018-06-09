@@ -39,18 +39,24 @@ static int scanstat(const char* str, struct stat *stbuf) {
     double atime, mtime, ctime;
     int l;
     
+    long long int st_ino;
+    long long int nlink;
+    long long int rdev;
+    long long int size;
+    long long int blocks;
+    
     int ret;
-    ret = sscanf(str, "ino=%lli mode=%c%c%c%c%c%c%c%c%c%c nlink=%i uid=%i gid=%i "
+    ret = sscanf(str, "ino=%lli mode=%c%c%c%c%c%c%c%c%c%c nlink=%lli uid=%i gid=%i "
         "rdev=%lli size=%lli blksize=%li blocks=%lli atime=%lf mtime=%lf ctime=%lf %n"
-         ,&stbuf->st_ino
+         ,&st_ino
          ,&mode, &mode_ur, &mode_uw, &mode_ux, &mode_gr, &mode_gw, &mode_gx, &mode_or, &mode_ow, &mode_ox
-         ,&stbuf->st_nlink
+         ,&nlink
          ,&stbuf->st_uid
          ,&stbuf->st_gid
-         ,&stbuf->st_rdev
-         ,&stbuf->st_size
+         ,&rdev
+         ,&size
          ,&stbuf->st_blksize
-         ,&stbuf->st_blocks
+         ,&blocks
          ,&atime, &mtime, &ctime
          ,&l
          );
@@ -58,7 +64,11 @@ static int scanstat(const char* str, struct stat *stbuf) {
     if(ret!= 21) {
         return 0;
     }
-    
+    stbuf->st_ino = st_ino;
+    stbuf->st_nlink = nlink;
+    stbuf->st_rdev = rdev;
+    stbuf->st_size = size;
+    stbuf->st_blocks = blocks;
     stbuf->st_ctime = ctime;
     stbuf->st_mtime = mtime;
     stbuf->st_atime = atime;
@@ -173,6 +183,19 @@ struct myinfo {
     int failed;
 };
 
+void setenv_mountpoint(int argc, char** argv)
+{
+    char* mp_buf = malloc(4096);
+    if(mp_buf == NULL) abort();
+    struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
+    if(fuse_parse_cmdline(&args, &mp_buf, NULL, NULL)!=0) abort();
+    char* mountpoint;
+    if(asprintf(&mountpoint, "%s", mp_buf)==-1) abort();
+    free(mp_buf);
+    setenv("EXECFUSE_MOUNTPOINT", mountpoint, 1);
+    free(mountpoint);
+}
+
 
 static int call_script_ll(const char* script_name, 
                         const char*const* params, 
@@ -266,7 +289,7 @@ static int write_the_file(struct myinfo* i, const char* path) {
     return 0;
 }
 
-static int execfuse_open(const char *path, struct fuse_file_info *fi)
+static int execfuse_open_impl(const char *path, struct fuse_file_info *fi)
 {
     struct myinfo* i = (struct myinfo*)malloc(sizeof *i);
    
@@ -285,9 +308,28 @@ static int execfuse_open(const char *path, struct fuse_file_info *fi)
     return 0;
 }
 
+static int execfuse_open(const char *path, struct fuse_file_info *fi)
+{
+    {
+        int sr = call_script_simple("open", path);
+        if (sr != 0 && sr != ENOSYS) {
+            return -sr;
+        }
+    }
+    return execfuse_open_impl(path, fi);
+}
+
 static int execfuse_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
-    int ret = execfuse_open(path, fi);
+    {
+        char mode_s[16];
+        sprintf(mode_s, "%o", (int)mode);
+        int sr = call_script_simple2("create", path, mode_s);
+        if (sr != 0 && sr != ENOSYS) {
+            return -sr;
+        }
+    }
+    int ret = execfuse_open_impl(path, fi);
     return ret;
 }
 
@@ -406,7 +448,7 @@ static int execfuse_ftruncate(const char *path, off_t size,
 static int execfuse_truncate(const char *path, off_t size)
 {
     char b[256];
-    sprintf(b, "%lld", size);
+    sprintf(b, "%lld", (long long int) size);
     return -call_script_simple2("truncate", path, b);
 }
 
@@ -417,7 +459,7 @@ static int execfuse_mknod(const char *path, mode_t mode, dev_t rdev)
         return -call_script_simple("mkfifo", path);
     } else {
         char b[256];
-        sprintf(b, "0x%016llx", rdev);
+        sprintf(b, "0x%016llx", (long long int)rdev);
         return -call_script_simple2("mknod", path, b);
     }
 }
@@ -561,6 +603,7 @@ int main(int argc, char *argv[])
     if(ret && ret!=ENOSYS) return ret;
     
     
+    setenv_mountpoint(argc-1, argv+1);
     struct fuse_args args = FUSE_ARGS_INIT(argc-1, argv+1);
     fuse_opt_parse(&args, NULL, NULL, NULL);
     fuse_opt_add_arg(&args, "-odirect_io");
