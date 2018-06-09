@@ -32,7 +32,7 @@ int execute_script(
 	const char** argv = (const char**)malloc((ppcount+pcount+2)*sizeof(char*));
 	assert(argv!=NULL);
 	
-	char script_path[4096];
+	char script_path[EXECFUSE_MAX_PATHLEN];
 	
 	sprintf(script_path, "%s/%s", directory, script_name);
 
@@ -88,7 +88,7 @@ int execute_script(
     if(to_be_read!=-1    && maxfd<to_be_read   ) maxfd = to_be_read   ;
     ++maxfd;
     
-    char buf[65536];
+    char buf[EXECFUSE_MAX_FILESIZE];
     fd_set rfds;
     fd_set wfds;
     

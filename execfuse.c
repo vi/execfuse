@@ -18,8 +18,19 @@
 #include "execute_script.h"
 
 #define SCRIPT_API_VERSION "0"
+#define EXECFUSE_MAX_FILESIZE 65536
+#define EXECFUSE_MAX_PATHLEN 4096
 
-char working_directory[4096];
+#define STATIC_MODE_STRING(bits, var) \
+ char var[16];\
+ bits&=07777;\
+ sprintf(var, "0%04o", bits)
+
+typedef int bool;
+#define TRUE 1
+#define FALSE 0
+
+char working_directory[EXECFUSE_MAX_PATHLEN];
 const char*const* addargs;
 
 
@@ -95,8 +106,8 @@ static int execfuse_getattr(const char *path, struct stat *stbuf)
     struct chunked_buffer* r = call_script_stdout("getattr", path);
     if(!r) return -ENOENT;
     
-    char buf[65536];
-    int ret = chunked_buffer_read(r, buf, 65535, 0);
+    char buf[EXECFUSE_MAX_FILESIZE];
+    int ret = chunked_buffer_read(r, buf, EXECFUSE_MAX_FILESIZE-1, 0);
     buf[ret]=0;
     chunked_buffer_delete(r);
     
@@ -124,8 +135,8 @@ static int execfuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     long long int offset_ = 0;
 
     for(;;) {
-        char buf_[65536];
-        int ret = chunked_buffer_read(r, buf_, 65535, offset_);
+        char buf_[EXECFUSE_MAX_FILESIZE];
+        int ret = chunked_buffer_read(r, buf_, EXECFUSE_MAX_FILESIZE-1, offset_);
         buf_[ret]=0;
         
         struct stat st;
@@ -171,11 +182,12 @@ struct myinfo {
     int readonly;
     int writeonly;
     int failed;
+    int backend_fd;
 };
 
 void setenv_mountpoint(int argc, char** argv)
 {
-    char* mp_buf = malloc(4096);
+    char* mp_buf = malloc(EXECFUSE_MAX_PATHLEN);
     if(mp_buf == NULL) abort();
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
     if(fuse_parse_cmdline(&args, &mp_buf, NULL, NULL)!=0) abort();
@@ -228,20 +240,25 @@ static int call_script_stdout_write(void* ii, const char* buf, int len) {
 }
 
 static struct chunked_buffer* call_script_stdout(const char* script_name, const char* param) {
-    const char* params[]={param, NULL};
-    struct chuncked_buffer_with_cursor i;
-    i.offset = 0;
-    i.content = chunked_buffer_new(4096);
+	return call_script_stdout_ret(script_name, param, NULL, NULL);
+}
+
+static struct chunked_buffer* call_script_stdout_ret(const char* script_name, const char* param1, const char* param2, int* call_return_code) {
+    const char* params[]={param1, param2, NULL};
+    struct chuncked_buffer_with_cursor cbuf;
+    cbuf.offset = 0;
+    cbuf.content = chunked_buffer_new(EXECFUSE_MAX_PATHLEN);
     int ret = call_script_ll(script_name
             ,params
             ,NULL, NULL
-            ,&call_script_stdout_write, (void*)&i
+            ,&call_script_stdout_write, (void*)&cbuf
         );
+    if(call_return_code != NULL) *call_return_code = ret;
     if(ret>0){
-        chunked_buffer_delete(i.content);
+        chunked_buffer_delete(cbuf.content);
         return NULL;
     }
-    return i.content;
+    return cbuf.content;
 }
 
 static int read_the_file_write(void* ii, const char* buf, int len) {
@@ -279,28 +296,125 @@ static int write_the_file(struct myinfo* i, const char* path) {
     return 0;
 }
 
+static int execfuse_open_internal(const char *path, struct fuse_file_info *fi, int flags, mode_t mode)
+{
+	int open_err;
+	struct chunked_buffer* backend_file_buf;
+	struct myinfo* info;
+	char * script_name;
+	bool internal;
+	int fd;
+
+fprintf(stderr, "fi->flags = %u ", fi->flags);
+if(fi->flags&O_APPEND) fprintf(stderr, "%s ", "O_APPEND");
+if(fi->flags&O_ASYNC) fprintf(stderr, "%s ", "O_ASYNC");
+if(fi->flags&O_CREAT) fprintf(stderr, "%s ", "O_CREAT");
+if(fi->flags&O_DIRECT) fprintf(stderr, "%s ", "O_DIRECT");
+if(fi->flags&O_DIRECTORY) fprintf(stderr, "%s ", "O_DIRECTORY");
+if(fi->flags&O_EXCL) fprintf(stderr, "%s ", "O_EXCL");
+if(fi->flags&O_LARGEFILE) fprintf(stderr, "%s ", "O_LARGEFILE");
+if(fi->flags&O_NOATIME) fprintf(stderr, "%s ", "O_NOATIME");
+if(fi->flags&O_NOCTTY) fprintf(stderr, "%s ", "O_NOCTTY");
+if(fi->flags&O_NOFOLLOW) fprintf(stderr, "%s ", "O_NOFOLLOW");
+if(fi->flags&O_NONBLOCK) fprintf(stderr, "%s ", "O_NONBLOCK");
+if(fi->flags&O_NDELAY) fprintf(stderr, "%s ", "O_NDELAY");
+if(fi->flags&O_SYNC) fprintf(stderr, "%s ", "O_SYNC");
+if(fi->flags&O_TRUNC) fprintf(stderr, "%s ", "O_TRUNC");
+if(fi->flags&O_RDONLY) fprintf(stderr, "%s ", "O_RDONLY");
+if(fi->flags&O_WRONLY) fprintf(stderr, "%s ", "O_WRONLY");
+if(fi->flags&O_RDWR) fprintf(stderr, "%s ", "O_RDWR");
+if(fi->flags&O_SYNC) fprintf(stderr, "%s ", "O_SYNC");
+fprintf(stderr, "\n");
+
+
+    STATIC_MODE_STRING(mode, modestr);
+	
+	if(flags & O_CREAT)
+	{
+		script_name = "create";
+	}
+	else
+	{
+		script_name = "open";
+		modestr[0] = 0;
+	}
+
+    backend_file_buf = call_script_stdout_ret(script_name, path, modestr, &open_err);
+
+	if(!open_err)
+	{
+		/* exec script indicated that there is no error opening this file */
+		
+		/* try to read physical file path */
+    	char backend_file[EXECFUSE_MAX_PATHLEN];
+    	int len = chunked_buffer_read(backend_file_buf, backend_file, EXECFUSE_MAX_PATHLEN-1, 0);
+    	backend_file[len] = 0;
+	    chunked_buffer_delete(backend_file_buf);
+	    
+	    if(len == 0)
+	    {
+	    	/* exec script did not give any physical file path */
+	    	/* falling back to internal file descriptor management */
+	    	internal = TRUE;
+	    }
+	    else
+	    {
+	    	internal = FALSE;
+	    	
+			fd = open(backend_file, flags, mode);
+			if(fd == -1)
+			{
+				return errno;
+			}
+		}
+	}
+	if(open_err == ENOSYS)
+	{
+		/* no implemented exec script for open (create) */
+		/* faling back to internal file descriptor management */
+    	internal = TRUE;
+	}
+	else
+	{
+		/* exec script indicated error while opening this file */
+		/* reflecting the error code */
+		return open_err;
+	}
+	
+	/* allocate file info object */
+	info = (struct myinfo*)malloc(sizeof *info);
+    sem_init(&info->sem, 0, 1);
+	
+    if(internal)
+    {
+	    info->tmpbuf=(unsigned char*)malloc(EXECFUSE_MAX_FILESIZE);
+	    info->content = chunked_buffer_new(EXECFUSE_MAX_FILESIZE);
+	    info->file_was_read = 0;
+	    info->file_was_written = 0;
+	    info->readonly = fi->flags & O_RDONLY ;
+	    info->writeonly = fi->flags & O_WRONLY;
+	}
+    else
+    {
+    	info->tmpbuf = NULL;
+    	info->content = NULL;
+    	info->backend_fd = fd;
+    }
+    
+    info->failed = 0;
+	fi->fh = (uintptr_t)  info;
+
+	return 0;
+}
+
 static int execfuse_open(const char *path, struct fuse_file_info *fi)
 {
-    struct myinfo* i = (struct myinfo*)malloc(sizeof *i);
-   
-    sem_init(&i->sem, 0, 1);
-    
-    i->tmpbuf=(unsigned char*)malloc(65536);
-    i->content = chunked_buffer_new(65536);
-    i->file_was_read = 0;
-    i->file_was_written = 0;
-    i->readonly = fi->flags & O_RDONLY ;
-    i->writeonly = fi->flags & O_WRONLY;
-    i->failed = 0;
-    
-    fi->fh = (uintptr_t)  i;
-    
-    return 0;
+	return execfuse_open_internal(path, fi, 0, -1);
 }
 
 static int execfuse_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
-    int ret = execfuse_open(path, fi);
+    int ret = execfuse_open_internal(path, fi, O_CREAT, mode);
     return ret;
 }
 
@@ -437,7 +551,8 @@ static int execfuse_mknod(const char *path, mode_t mode, dev_t rdev)
 
 static int execfuse_mkdir(const char *path, mode_t mode)
 {
-    return -call_script_simple("mkdir", path);
+	STATIC_MODE_STRING(mode, b);
+    return -call_script_simple("mkdir", path, b);
 }
 
 static int execfuse_unlink(const char *path)
@@ -467,9 +582,7 @@ static int execfuse_link(const char *from, const char *to)
 
 static int execfuse_chmod(const char *path, mode_t mode)
 {
-    char b[16];
-    mode&=07777;
-    sprintf(b, "0%04o", mode);
+	STATIC_MODE_STRING(mode, b);
     return -call_script_simple2("chmod", path, b);
 }
 
@@ -561,7 +674,7 @@ int main(int argc, char *argv[])
         perror("chdir");
         return 2;
     }
-    getcwd(working_directory, 4096);
+    getcwd(working_directory, EXECFUSE_MAX_PATHLEN);
     fchdir(cd);
     
     {
