@@ -341,7 +341,7 @@ static int execfuse_open_internal(const char *path, struct fuse_file_info *fi, m
 			fd = open(backend_file, fi->flags, mode);
 			if(fd == -1)
 			{
-				return errno;
+				return -errno;
 			}
 		}
 	}
@@ -354,8 +354,8 @@ static int execfuse_open_internal(const char *path, struct fuse_file_info *fi, m
 	else
 	{
 		/* exec script indicated error while opening this file */
-		/* reflecting the error code */
-		return open_err;
+		/* reflecting the error code to fuse */
+		return -open_err;
 	}
 	
 	/* allocate file info object */
