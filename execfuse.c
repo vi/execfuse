@@ -463,22 +463,28 @@ static int execfuse_write(const char *path, const char *buf, size_t size, off_t 
     struct myinfo* i = (struct myinfo*)(uintptr_t)  fi->fh;
     if(!i) return -ENOSYS;
     
-    if (i->readonly || i->failed) {
-        return -EBADF;
-    }
+    if(i->content)
+    {
+	    if (i->readonly || i->failed) {
+	        return -EBADF;
+	    }
+	    
+	    sem_wait(&i->sem);
+	    
+	    int ret = 0;
+	    
+	    i->file_was_written = 1;
     
-    sem_wait(&i->sem);
-    
-    int ret = 0;
-    
-    i->file_was_written = 1;
-    
-    ret = chunked_buffer_write(i->content, buf, size, offset);
+	    ret = chunked_buffer_write(i->content, buf, size, offset);
     
     
-    sem_post(&i->sem);
-    return ret;
-
+	    sem_post(&i->sem);
+	    return ret;
+	}
+	else
+	{
+		return pwrite(i->backend_fd, buf, size, offset);
+	}
 }
 
 static int execfuse_release(const char *path, struct fuse_file_info *fi)
@@ -519,18 +525,29 @@ static int execfuse_ftruncate(const char *path, off_t size,
     struct myinfo* i = (struct myinfo*)(uintptr_t)  fi->fh;
     if(!i) return -ENOSYS;
     
-    if (i->readonly || i->failed) {
-        return -EBADF;
-    }
-    
-    sem_wait(&i->sem);
-    
-    int ret = 0;
-    
-    chunked_buffer_truncate(i->content, size);
-    
-    sem_post(&i->sem);
-    return ret;
+    if(i->content)
+    {
+	    if (i->readonly || i->failed) {
+	        return -EBADF;
+	    }
+	    
+	    sem_wait(&i->sem);
+	    
+	    int ret = 0;
+	    
+	    chunked_buffer_truncate(i->content, size);
+	    
+	    sem_post(&i->sem);
+	    return ret;
+	}
+	else
+	{
+		if(ftruncate(i->backend_fd, size) != 0)
+		{
+			return -errno;
+		}
+		return 0;
+	}
 }
 
 static int execfuse_truncate(const char *path, off_t size)
