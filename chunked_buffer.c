@@ -2,6 +2,7 @@
 #include <string.h>
 #include <malloc.h>
 
+#include "common.h"
 #include "chunked_buffer.h"
 
 struct chunked_buffer {

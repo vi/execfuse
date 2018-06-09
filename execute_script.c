@@ -9,6 +9,7 @@
 #include <sys/wait.h>
 
 
+#include "common.h"
 #include "execute_script.h"
 
 int execute_script(

@@ -14,12 +14,11 @@
 #include <sys/time.h>
 #include <semaphore.h>
 
+#include "common.h"
 #include "chunked_buffer.h"
 #include "execute_script.h"
 
 #define SCRIPT_API_VERSION "0"
-#define EXECFUSE_MAX_FILESIZE 65536
-#define EXECFUSE_MAX_PATHLEN 4096
 
 #define STATIC_MODE_STRING(bits, var) \
  char var[16];\
@@ -239,10 +238,6 @@ static int call_script_stdout_write(void* ii, const char* buf, int len) {
     return len;
 }
 
-static struct chunked_buffer* call_script_stdout(const char* script_name, const char* param) {
-	return call_script_stdout_ret(script_name, param, NULL, NULL);
-}
-
 static struct chunked_buffer* call_script_stdout_ret(const char* script_name, const char* param1, const char* param2, int* call_return_code) {
     const char* params[]={param1, param2, NULL};
     struct chuncked_buffer_with_cursor cbuf;
@@ -259,6 +254,10 @@ static struct chunked_buffer* call_script_stdout_ret(const char* script_name, co
         return NULL;
     }
     return cbuf.content;
+}
+
+static struct chunked_buffer* call_script_stdout(const char* script_name, const char* param) {
+	return call_script_stdout_ret(script_name, param, NULL, NULL);
 }
 
 static int read_the_file_write(void* ii, const char* buf, int len) {
@@ -552,7 +551,7 @@ static int execfuse_mknod(const char *path, mode_t mode, dev_t rdev)
 static int execfuse_mkdir(const char *path, mode_t mode)
 {
 	STATIC_MODE_STRING(mode, b);
-    return -call_script_simple("mkdir", path, b);
+    return -call_script_simple2("mkdir", path, b);
 }
 
 static int execfuse_unlink(const char *path)
