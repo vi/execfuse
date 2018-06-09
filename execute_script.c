@@ -20,6 +20,10 @@ int execute_script(
 						read_t stdin_fn, void* stdin_obj,
                         write_t stdout_fn, void* stdout_obj
 						) {
+fprintf(stderr, "execute_script(%s, %s, %s", directory, script_name, params[0]);
+int debug_n;
+for(debug_n=1; params[debug_n]; debug_n++) fprintf(stderr, ", %s", params[debug_n]);
+fprintf(stderr, ")\n");
     
 	int ppcount=0;
 	int i;

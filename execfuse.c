@@ -345,7 +345,7 @@ static int execfuse_open_internal(const char *path, struct fuse_file_info *fi, m
 			}
 		}
 	}
-	if(open_err == ENOSYS)
+	else if(open_err == ENOSYS)
 	{
 		/* no implemented exec script for open (create) */
 		/* faling back to internal file descriptor management */
@@ -399,14 +399,23 @@ static int execfuse_create(const char *path, mode_t mode, struct fuse_file_info 
 static int execfuse_fgetattr(const char *path, struct stat *stbuf,
             struct fuse_file_info *fi)
 {
-    /* Stub for creating files */
-    
-    (void) path;
-    memset(stbuf, 0, sizeof(*stbuf));
-    stbuf->st_mode = S_IFREG;
-    stbuf->st_blksize = 512;    
-
-    return 0;
+    struct myinfo* info = (struct myinfo*)(uintptr_t)  fi->fh;
+	
+	if(!info || info->content)
+	{
+	    /* Stub for creating files */
+	    
+	    (void) path;
+	    memset(stbuf, 0, sizeof(*stbuf));
+	    stbuf->st_mode = S_IFREG;
+	    stbuf->st_blksize = 512;    
+	
+	    return 0;
+    }
+    else
+    {
+    	return fstat(info->backend_fd, stbuf);
+    }
 }
 
 static int execfuse_read(const char *path, char *buf, size_t size, off_t offset,
@@ -415,30 +424,36 @@ static int execfuse_read(const char *path, char *buf, size_t size, off_t offset,
     struct myinfo* i = (struct myinfo*)(uintptr_t)  fi->fh;
     if(!i) return -ENOSYS;
     
-    if (i->writeonly || i->failed) {
-        return -EBADF;
-    }
-    
-    sem_wait(&i->sem);
-    
-    int ret = 0;
-
-    
-    if(!i->file_was_read && !i->file_was_written) {
-        ret = read_the_file(i, path);
-        i->file_was_read = 1;
-        if(ret>0) {
-            i->failed = 1;
-            sem_post(&i->sem);
-            return -ret;    
-        }
-    }
-    
-    ret = chunked_buffer_read(i->content, buf, size, offset);
-    
-    sem_post(&i->sem);
-    return ret;
-
+    if(i->content)
+    {
+	    if (i->writeonly || i->failed) {
+	        return -EBADF;
+	    }
+	    
+	    sem_wait(&i->sem);
+	    
+	    int ret = 0;
+	
+	    
+	    if(!i->file_was_read && !i->file_was_written) {
+	        ret = read_the_file(i, path);
+	        i->file_was_read = 1;
+	        if(ret>0) {
+	            i->failed = 1;
+	            sem_post(&i->sem);
+	            return -ret;    
+	        }
+	    }
+	    
+	    ret = chunked_buffer_read(i->content, buf, size, offset);
+	    
+	    sem_post(&i->sem);
+	    return ret;
+	}
+	else
+	{
+		return pread(i->backend_fd, buf, size, offset);
+	}
 }
 
 
@@ -472,17 +487,27 @@ static int execfuse_release(const char *path, struct fuse_file_info *fi)
     
     struct myinfo* i = (struct myinfo*)(uintptr_t)  fi->fh;
     if(!i) return -ENOSYS;
-    
-    
+
     int ret = 0;
     
-    if(i->file_was_written && !i->failed) {
-        ret = write_the_file(i, path);
-    }
-    
-    sem_destroy(&i->sem);
-    chunked_buffer_delete(i->content);
-    free(i->tmpbuf);
+    if(i->content)
+    {
+	    if(i->file_was_written && !i->failed) {
+	        ret = write_the_file(i, path);
+	    }
+	    
+	    sem_destroy(&i->sem);
+	    chunked_buffer_delete(i->content);
+	    free(i->tmpbuf);
+	}
+	else
+	{
+		if(close(i->backend_fd) != 0)
+		{
+			ret = errno;
+		}
+	}
+	
     free(i);
 
     return -ret;
