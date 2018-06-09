@@ -295,7 +295,7 @@ static int write_the_file(struct myinfo* i, const char* path) {
     return 0;
 }
 
-static int execfuse_open_internal(const char *path, struct fuse_file_info *fi, int flags, mode_t mode)
+static int execfuse_open_internal(const char *path, struct fuse_file_info *fi, mode_t mode)
 {
 	int open_err;
 	struct chunked_buffer* backend_file_buf;
@@ -304,31 +304,9 @@ static int execfuse_open_internal(const char *path, struct fuse_file_info *fi, i
 	bool internal;
 	int fd;
 
-fprintf(stderr, "fi->flags = %u ", fi->flags);
-if(fi->flags&O_APPEND) fprintf(stderr, "%s ", "O_APPEND");
-if(fi->flags&O_ASYNC) fprintf(stderr, "%s ", "O_ASYNC");
-if(fi->flags&O_CREAT) fprintf(stderr, "%s ", "O_CREAT");
-if(fi->flags&O_DIRECT) fprintf(stderr, "%s ", "O_DIRECT");
-if(fi->flags&O_DIRECTORY) fprintf(stderr, "%s ", "O_DIRECTORY");
-if(fi->flags&O_EXCL) fprintf(stderr, "%s ", "O_EXCL");
-if(fi->flags&O_LARGEFILE) fprintf(stderr, "%s ", "O_LARGEFILE");
-if(fi->flags&O_NOATIME) fprintf(stderr, "%s ", "O_NOATIME");
-if(fi->flags&O_NOCTTY) fprintf(stderr, "%s ", "O_NOCTTY");
-if(fi->flags&O_NOFOLLOW) fprintf(stderr, "%s ", "O_NOFOLLOW");
-if(fi->flags&O_NONBLOCK) fprintf(stderr, "%s ", "O_NONBLOCK");
-if(fi->flags&O_NDELAY) fprintf(stderr, "%s ", "O_NDELAY");
-if(fi->flags&O_SYNC) fprintf(stderr, "%s ", "O_SYNC");
-if(fi->flags&O_TRUNC) fprintf(stderr, "%s ", "O_TRUNC");
-if(fi->flags&O_RDONLY) fprintf(stderr, "%s ", "O_RDONLY");
-if(fi->flags&O_WRONLY) fprintf(stderr, "%s ", "O_WRONLY");
-if(fi->flags&O_RDWR) fprintf(stderr, "%s ", "O_RDWR");
-if(fi->flags&O_SYNC) fprintf(stderr, "%s ", "O_SYNC");
-fprintf(stderr, "\n");
-
-
     STATIC_MODE_STRING(mode, modestr);
 	
-	if(flags & O_CREAT)
+	if(fi->flags & O_CREAT)
 	{
 		script_name = "create";
 	}
@@ -360,7 +338,7 @@ fprintf(stderr, "\n");
 	    {
 	    	internal = FALSE;
 	    	
-			fd = open(backend_file, flags, mode);
+			fd = open(backend_file, fi->flags, mode);
 			if(fd == -1)
 			{
 				return errno;
@@ -408,12 +386,13 @@ fprintf(stderr, "\n");
 
 static int execfuse_open(const char *path, struct fuse_file_info *fi)
 {
-	return execfuse_open_internal(path, fi, 0, -1);
+	return execfuse_open_internal(path, fi, -1);
 }
 
 static int execfuse_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
-    int ret = execfuse_open_internal(path, fi, O_CREAT, mode);
+	fi->flags |= O_CREAT;
+    int ret = execfuse_open_internal(path, fi, mode);
     return ret;
 }
 
