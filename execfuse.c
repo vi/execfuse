@@ -49,18 +49,24 @@ static int scanstat(const char* str, struct stat *stbuf) {
     double atime, mtime, ctime;
     int l;
     
+    long long int st_ino;
+    long long int nlink;
+    long long int rdev;
+    long long int size;
+    long long int blocks;
+    
     int ret;
-    ret = sscanf(str, "ino=%lli mode=%c%c%c%c%c%c%c%c%c%c nlink=%i uid=%i gid=%i "
+    ret = sscanf(str, "ino=%lli mode=%c%c%c%c%c%c%c%c%c%c nlink=%lli uid=%i gid=%i "
         "rdev=%lli size=%lli blksize=%li blocks=%lli atime=%lf mtime=%lf ctime=%lf %n"
-         ,&stbuf->st_ino
+         ,&st_ino
          ,&mode, &mode_ur, &mode_uw, &mode_ux, &mode_gr, &mode_gw, &mode_gx, &mode_or, &mode_ow, &mode_ox
-         ,&stbuf->st_nlink
+         ,&nlink
          ,&stbuf->st_uid
          ,&stbuf->st_gid
-         ,&stbuf->st_rdev
-         ,&stbuf->st_size
+         ,&rdev
+         ,&size
          ,&stbuf->st_blksize
-         ,&stbuf->st_blocks
+         ,&blocks
          ,&atime, &mtime, &ctime
          ,&l
          );
@@ -68,7 +74,11 @@ static int scanstat(const char* str, struct stat *stbuf) {
     if(ret!= 21) {
         return 0;
     }
-    
+    stbuf->st_ino = st_ino;
+    stbuf->st_nlink = nlink;
+    stbuf->st_rdev = rdev;
+    stbuf->st_size = size;
+    stbuf->st_blocks = blocks;
     stbuf->st_ctime = ctime;
     stbuf->st_mtime = mtime;
     stbuf->st_atime = atime;
@@ -553,7 +563,7 @@ static int execfuse_ftruncate(const char *path, off_t size,
 static int execfuse_truncate(const char *path, off_t size)
 {
     char b[256];
-    sprintf(b, "%lld", size);
+    sprintf(b, "%lld", (long long int) size);
     return -call_script_simple2("truncate", path, b);
 }
 
@@ -564,7 +574,7 @@ static int execfuse_mknod(const char *path, mode_t mode, dev_t rdev)
         return -call_script_simple("mkfifo", path);
     } else {
         char b[256];
-        sprintf(b, "0x%016llx", rdev);
+        sprintf(b, "0x%016llx", (long long int)rdev);
         return -call_script_simple2("mknod", path, b);
     }
 }
