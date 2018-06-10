@@ -1,4 +1,10 @@
 #!/bin/sh
 # Optional script: if not implemented, read_file will be called for any file
 # Arguments: path
+
+# If something echo'ed here, execfuse will try to open that file, and
+# further file operations on file descriptor will be performed against that open file.
+# Eg.
+# echo "$HOME/.cache/$1"
+
 exit 0
