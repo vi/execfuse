@@ -89,7 +89,7 @@ int execute_script(
     if(to_be_read!=-1    && maxfd<to_be_read   ) maxfd = to_be_read   ;
     ++maxfd;
     
-    char buf[EXECFUSE_MAX_FILESIZE];
+    char buf[EXECFUSE_CHUNKSIZE];
     fd_set rfds;
     fd_set wfds;
     
