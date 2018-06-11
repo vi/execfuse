@@ -115,8 +115,8 @@ static int execfuse_getattr(const char *path, struct stat *stbuf)
     struct chunked_buffer* r = call_script_stdout("getattr", path);
     if(!r) return -ENOENT;
     
-    char buf[EXECFUSE_MAX_FILESIZE];
-    int ret = chunked_buffer_read(r, buf, EXECFUSE_MAX_FILESIZE-1, 0);
+    char buf[EXECFUSE_CHUNKSIZE];
+    int ret = chunked_buffer_read(r, buf, EXECFUSE_CHUNKSIZE-1, 0);
     buf[ret]=0;
     chunked_buffer_delete(r);
     
@@ -144,8 +144,8 @@ static int execfuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     long long int offset_ = 0;
 
     for(;;) {
-        char buf_[EXECFUSE_MAX_FILESIZE];
-        int ret = chunked_buffer_read(r, buf_, EXECFUSE_MAX_FILESIZE-1, offset_);
+        char buf_[EXECFUSE_CHUNKSIZE];
+        int ret = chunked_buffer_read(r, buf_, EXECFUSE_CHUNKSIZE-1, offset_);
         buf_[ret]=0;
         
         struct stat st;
@@ -374,8 +374,8 @@ static int execfuse_open_internal(const char *path, struct fuse_file_info *fi, m
     
     if(internal)
     {
-        info->tmpbuf=(unsigned char*)malloc(EXECFUSE_MAX_FILESIZE);
-        info->content = chunked_buffer_new(EXECFUSE_MAX_FILESIZE);
+        info->tmpbuf=(unsigned char*)malloc(EXECFUSE_CHUNKSIZE);
+        info->content = chunked_buffer_new(EXECFUSE_CHUNKSIZE);
         info->file_was_read = 0;
         info->file_was_written = 0;
         info->readonly = fi->flags & O_RDONLY ;
