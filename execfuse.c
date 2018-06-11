@@ -14,12 +14,22 @@
 #include <sys/time.h>
 #include <semaphore.h>
 
+#include "common.h"
 #include "chunked_buffer.h"
 #include "execute_script.h"
 
 #define SCRIPT_API_VERSION "0"
 
-char working_directory[4096];
+#define STATIC_MODE_STRING(bits, var) \
+ char var[16];\
+ bits&=07777;\
+ sprintf(var, "0%04o", bits)
+
+typedef int bool;
+#define TRUE 1
+#define FALSE 0
+
+char working_directory[EXECFUSE_MAX_PATHLEN];
 const char*const* addargs;
 
 
@@ -39,18 +49,24 @@ static int scanstat(const char* str, struct stat *stbuf) {
     double atime, mtime, ctime;
     int l;
     
+    long long int st_ino;
+    long long int nlink;
+    long long int rdev;
+    long long int size;
+    long long int blocks;
+    
     int ret;
-    ret = sscanf(str, "ino=%lli mode=%c%c%c%c%c%c%c%c%c%c nlink=%i uid=%i gid=%i "
+    ret = sscanf(str, "ino=%lli mode=%c%c%c%c%c%c%c%c%c%c nlink=%lli uid=%i gid=%i "
         "rdev=%lli size=%lli blksize=%li blocks=%lli atime=%lf mtime=%lf ctime=%lf %n"
-         ,&stbuf->st_ino
+         ,&st_ino
          ,&mode, &mode_ur, &mode_uw, &mode_ux, &mode_gr, &mode_gw, &mode_gx, &mode_or, &mode_ow, &mode_ox
-         ,&stbuf->st_nlink
+         ,&nlink
          ,&stbuf->st_uid
          ,&stbuf->st_gid
-         ,&stbuf->st_rdev
-         ,&stbuf->st_size
+         ,&rdev
+         ,&size
          ,&stbuf->st_blksize
-         ,&stbuf->st_blocks
+         ,&blocks
          ,&atime, &mtime, &ctime
          ,&l
          );
@@ -58,7 +74,11 @@ static int scanstat(const char* str, struct stat *stbuf) {
     if(ret!= 21) {
         return 0;
     }
-    
+    stbuf->st_ino = st_ino;
+    stbuf->st_nlink = nlink;
+    stbuf->st_rdev = rdev;
+    stbuf->st_size = size;
+    stbuf->st_blocks = blocks;
     stbuf->st_ctime = ctime;
     stbuf->st_mtime = mtime;
     stbuf->st_atime = atime;
@@ -95,8 +115,8 @@ static int execfuse_getattr(const char *path, struct stat *stbuf)
     struct chunked_buffer* r = call_script_stdout("getattr", path);
     if(!r) return -ENOENT;
     
-    char buf[65536];
-    int ret = chunked_buffer_read(r, buf, 65535, 0);
+    char buf[EXECFUSE_MAX_FILESIZE];
+    int ret = chunked_buffer_read(r, buf, EXECFUSE_MAX_FILESIZE-1, 0);
     buf[ret]=0;
     chunked_buffer_delete(r);
     
@@ -124,8 +144,8 @@ static int execfuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     long long int offset_ = 0;
 
     for(;;) {
-        char buf_[65536];
-        int ret = chunked_buffer_read(r, buf_, 65535, offset_);
+        char buf_[EXECFUSE_MAX_FILESIZE];
+        int ret = chunked_buffer_read(r, buf_, EXECFUSE_MAX_FILESIZE-1, offset_);
         buf_[ret]=0;
         
         struct stat st;
@@ -171,7 +191,21 @@ struct myinfo {
     int readonly;
     int writeonly;
     int failed;
+    int backend_fd;
 };
+
+void setenv_mountpoint(int argc, char** argv)
+{
+    char* mp_buf = malloc(EXECFUSE_MAX_PATHLEN);
+    if(mp_buf == NULL) abort();
+    struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
+    if(fuse_parse_cmdline(&args, &mp_buf, NULL, NULL)!=0) abort();
+    char* mountpoint;
+    if(asprintf(&mountpoint, "%s", mp_buf)==-1) abort();
+    free(mp_buf);
+    setenv("EXECFUSE_MOUNTPOINT", mountpoint, 1);
+    free(mountpoint);
+}
 
 
 static int call_script_ll(const char* script_name, 
@@ -214,21 +248,26 @@ static int call_script_stdout_write(void* ii, const char* buf, int len) {
     return len;
 }
 
-static struct chunked_buffer* call_script_stdout(const char* script_name, const char* param) {
-    const char* params[]={param, NULL};
-    struct chuncked_buffer_with_cursor i;
-    i.offset = 0;
-    i.content = chunked_buffer_new(4096);
+static struct chunked_buffer* call_script_stdout_ret(const char* script_name, const char* param1, const char* param2, int* call_return_code) {
+    const char* params[]={param1, param2, NULL};
+    struct chuncked_buffer_with_cursor cbuf;
+    cbuf.offset = 0;
+    cbuf.content = chunked_buffer_new(EXECFUSE_MAX_PATHLEN);
     int ret = call_script_ll(script_name
             ,params
             ,NULL, NULL
-            ,&call_script_stdout_write, (void*)&i
+            ,&call_script_stdout_write, (void*)&cbuf
         );
+    if(call_return_code != NULL) *call_return_code = ret;
     if(ret>0){
-        chunked_buffer_delete(i.content);
+        chunked_buffer_delete(cbuf.content);
         return NULL;
     }
-    return i.content;
+    return cbuf.content;
+}
+
+static struct chunked_buffer* call_script_stdout(const char* script_name, const char* param) {
+    return call_script_stdout_ret(script_name, param, NULL, NULL);
 }
 
 static int read_the_file_write(void* ii, const char* buf, int len) {
@@ -266,42 +305,127 @@ static int write_the_file(struct myinfo* i, const char* path) {
     return 0;
 }
 
+static int execfuse_open_internal(const char *path, struct fuse_file_info *fi, mode_t mode)
+{
+    int open_err;
+    struct chunked_buffer* backend_file_buf;
+    struct myinfo* info;
+    char * script_name;
+    bool internal;
+    int fd;
+
+    STATIC_MODE_STRING(mode, modestr);
+    
+    if(fi->flags & O_CREAT)
+    {
+        script_name = "create";
+    }
+    else
+    {
+        script_name = "open";
+        modestr[0] = 0;
+    }
+
+    backend_file_buf = call_script_stdout_ret(script_name, path, modestr, &open_err);
+
+    if(!open_err)
+    {
+        /* exec script indicated that there is no error opening this file */
+        
+        /* try to read physical file path */
+        char backend_file[EXECFUSE_MAX_PATHLEN];
+        int len = chunked_buffer_read(backend_file_buf, backend_file, EXECFUSE_MAX_PATHLEN-1, 0);
+        backend_file[len] = 0;
+        chunked_buffer_delete(backend_file_buf);
+        
+        if(len == 0)
+        {
+            /* exec script did not give any physical file path */
+            /* falling back to internal file descriptor management */
+            internal = TRUE;
+        }
+        else
+        {
+            internal = FALSE;
+            
+            fd = open(backend_file, fi->flags, mode);
+            if(fd == -1)
+            {
+                return -errno;
+            }
+        }
+    }
+    else if(open_err == ENOSYS)
+    {
+        /* no implemented exec script for open (create) */
+        /* faling back to internal file descriptor management */
+        internal = TRUE;
+    }
+    else
+    {
+        /* exec script indicated error while opening this file */
+        /* reflecting the error code to fuse */
+        return -open_err;
+    }
+    
+    /* allocate file info object */
+    info = (struct myinfo*)malloc(sizeof *info);
+    sem_init(&info->sem, 0, 1);
+    
+    if(internal)
+    {
+        info->tmpbuf=(unsigned char*)malloc(EXECFUSE_MAX_FILESIZE);
+        info->content = chunked_buffer_new(EXECFUSE_MAX_FILESIZE);
+        info->file_was_read = 0;
+        info->file_was_written = 0;
+        info->readonly = fi->flags & O_RDONLY ;
+        info->writeonly = fi->flags & O_WRONLY;
+    }
+    else
+    {
+        info->tmpbuf = NULL;
+        info->content = NULL;
+        info->backend_fd = fd;
+    }
+    
+    info->failed = 0;
+    fi->fh = (uintptr_t)  info;
+
+    return 0;
+}
+
 static int execfuse_open(const char *path, struct fuse_file_info *fi)
 {
-    struct myinfo* i = (struct myinfo*)malloc(sizeof *i);
-   
-    sem_init(&i->sem, 0, 1);
-    
-    i->tmpbuf=(unsigned char*)malloc(65536);
-    i->content = chunked_buffer_new(65536);
-    i->file_was_read = 0;
-    i->file_was_written = 0;
-    i->readonly = fi->flags & O_RDONLY ;
-    i->writeonly = fi->flags & O_WRONLY;
-    i->failed = 0;
-    
-    fi->fh = (uintptr_t)  i;
-    
-    return 0;
+    return execfuse_open_internal(path, fi, -1);
 }
 
 static int execfuse_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
-    int ret = execfuse_open(path, fi);
+    fi->flags |= O_CREAT;
+    int ret = execfuse_open_internal(path, fi, mode);
     return ret;
 }
 
 static int execfuse_fgetattr(const char *path, struct stat *stbuf,
             struct fuse_file_info *fi)
 {
-    /* Stub for creating files */
+    struct myinfo* info = (struct myinfo*)(uintptr_t)  fi->fh;
     
-    (void) path;
-    memset(stbuf, 0, sizeof(*stbuf));
-    stbuf->st_mode = S_IFREG;
-    stbuf->st_blksize = 512;    
-
-    return 0;
+    if(!info || info->content)
+    {
+        /* Stub for creating files */
+        
+        (void) path;
+        memset(stbuf, 0, sizeof(*stbuf));
+        stbuf->st_mode = S_IFREG;
+        stbuf->st_blksize = 512;    
+    
+        return 0;
+    }
+    else
+    {
+        return fstat(info->backend_fd, stbuf);
+    }
 }
 
 static int execfuse_read(const char *path, char *buf, size_t size, off_t offset,
@@ -310,30 +434,36 @@ static int execfuse_read(const char *path, char *buf, size_t size, off_t offset,
     struct myinfo* i = (struct myinfo*)(uintptr_t)  fi->fh;
     if(!i) return -ENOSYS;
     
-    if (i->writeonly || i->failed) {
-        return -EBADF;
-    }
-    
-    sem_wait(&i->sem);
-    
-    int ret = 0;
-
-    
-    if(!i->file_was_read && !i->file_was_written) {
-        ret = read_the_file(i, path);
-        i->file_was_read = 1;
-        if(ret>0) {
-            i->failed = 1;
-            sem_post(&i->sem);
-            return -ret;    
+    if(i->content)
+    {
+        if (i->writeonly || i->failed) {
+            return -EBADF;
         }
+        
+        sem_wait(&i->sem);
+        
+        int ret = 0;
+    
+        
+        if(!i->file_was_read && !i->file_was_written) {
+            ret = read_the_file(i, path);
+            i->file_was_read = 1;
+            if(ret>0) {
+                i->failed = 1;
+                sem_post(&i->sem);
+                return -ret;    
+            }
+        }
+        
+        ret = chunked_buffer_read(i->content, buf, size, offset);
+        
+        sem_post(&i->sem);
+        return ret;
     }
-    
-    ret = chunked_buffer_read(i->content, buf, size, offset);
-    
-    sem_post(&i->sem);
-    return ret;
-
+    else
+    {
+        return pread(i->backend_fd, buf, size, offset);
+    }
 }
 
 
@@ -343,22 +473,28 @@ static int execfuse_write(const char *path, const char *buf, size_t size, off_t 
     struct myinfo* i = (struct myinfo*)(uintptr_t)  fi->fh;
     if(!i) return -ENOSYS;
     
-    if (i->readonly || i->failed) {
-        return -EBADF;
+    if(i->content)
+    {
+        if (i->readonly || i->failed) {
+            return -EBADF;
+        }
+        
+        sem_wait(&i->sem);
+        
+        int ret = 0;
+        
+        i->file_was_written = 1;
+    
+        ret = chunked_buffer_write(i->content, buf, size, offset);
+    
+    
+        sem_post(&i->sem);
+        return ret;
     }
-    
-    sem_wait(&i->sem);
-    
-    int ret = 0;
-    
-    i->file_was_written = 1;
-    
-    ret = chunked_buffer_write(i->content, buf, size, offset);
-    
-    
-    sem_post(&i->sem);
-    return ret;
-
+    else
+    {
+        return pwrite(i->backend_fd, buf, size, offset);
+    }
 }
 
 static int execfuse_release(const char *path, struct fuse_file_info *fi)
@@ -367,17 +503,27 @@ static int execfuse_release(const char *path, struct fuse_file_info *fi)
     
     struct myinfo* i = (struct myinfo*)(uintptr_t)  fi->fh;
     if(!i) return -ENOSYS;
-    
-    
+
     int ret = 0;
     
-    if(i->file_was_written && !i->failed) {
-        ret = write_the_file(i, path);
+    if(i->content)
+    {
+        if(i->file_was_written && !i->failed) {
+            ret = write_the_file(i, path);
+        }
+        
+        sem_destroy(&i->sem);
+        chunked_buffer_delete(i->content);
+        free(i->tmpbuf);
+    }
+    else
+    {
+        if(close(i->backend_fd) != 0)
+        {
+            ret = errno;
+        }
     }
     
-    sem_destroy(&i->sem);
-    chunked_buffer_delete(i->content);
-    free(i->tmpbuf);
     free(i);
 
     return -ret;
@@ -389,24 +535,35 @@ static int execfuse_ftruncate(const char *path, off_t size,
     struct myinfo* i = (struct myinfo*)(uintptr_t)  fi->fh;
     if(!i) return -ENOSYS;
     
-    if (i->readonly || i->failed) {
-        return -EBADF;
+    if(i->content)
+    {
+        if (i->readonly || i->failed) {
+            return -EBADF;
+        }
+        
+        sem_wait(&i->sem);
+        
+        int ret = 0;
+        
+        chunked_buffer_truncate(i->content, size);
+        
+        sem_post(&i->sem);
+        return ret;
     }
-    
-    sem_wait(&i->sem);
-    
-    int ret = 0;
-    
-    chunked_buffer_truncate(i->content, size);
-    
-    sem_post(&i->sem);
-    return ret;
+    else
+    {
+        if(ftruncate(i->backend_fd, size) != 0)
+        {
+            return -errno;
+        }
+        return 0;
+    }
 }
 
 static int execfuse_truncate(const char *path, off_t size)
 {
     char b[256];
-    sprintf(b, "%lld", size);
+    sprintf(b, "%lld", (long long int) size);
     return -call_script_simple2("truncate", path, b);
 }
 
@@ -417,14 +574,15 @@ static int execfuse_mknod(const char *path, mode_t mode, dev_t rdev)
         return -call_script_simple("mkfifo", path);
     } else {
         char b[256];
-        sprintf(b, "0x%016llx", rdev);
+        sprintf(b, "0x%016llx", (long long int)rdev);
         return -call_script_simple2("mknod", path, b);
     }
 }
 
 static int execfuse_mkdir(const char *path, mode_t mode)
 {
-    return -call_script_simple("mkdir", path);
+    STATIC_MODE_STRING(mode, b);
+    return -call_script_simple2("mkdir", path, b);
 }
 
 static int execfuse_unlink(const char *path)
@@ -454,9 +612,7 @@ static int execfuse_link(const char *from, const char *to)
 
 static int execfuse_chmod(const char *path, mode_t mode)
 {
-    char b[16];
-    mode&=07777;
-    sprintf(b, "0%04o", mode);
+    STATIC_MODE_STRING(mode, b);
     return -call_script_simple2("chmod", path, b);
 }
 
@@ -548,7 +704,7 @@ int main(int argc, char *argv[])
         perror("chdir");
         return 2;
     }
-    getcwd(working_directory, 4096);
+    getcwd(working_directory, EXECFUSE_MAX_PATHLEN);
     fchdir(cd);
     
     {
@@ -561,6 +717,7 @@ int main(int argc, char *argv[])
     if(ret && ret!=ENOSYS) return ret;
     
     
+    setenv_mountpoint(argc-1, argv+1);
     struct fuse_args args = FUSE_ARGS_INIT(argc-1, argv+1);
     fuse_opt_parse(&args, NULL, NULL, NULL);
     fuse_opt_add_arg(&args, "-odirect_io");
