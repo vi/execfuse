@@ -635,8 +635,8 @@ static int execfuse_utimens(const char *path, const struct timespec ts[2])
     
     char b1[64];
     char b2[64];
-    sprintf(b1, "%lg", atime);
-    sprintf(b2, "%lg", mtime);
+    sprintf(b1, "%.10lf", atime);
+    sprintf(b2, "%.10lf", mtime);
     return -call_script_simple3("utimens", path, b1, b2);
 }
 
