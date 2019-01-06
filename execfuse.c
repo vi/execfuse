@@ -518,10 +518,17 @@ static int execfuse_release(const char *path, struct fuse_file_info *fi)
     }
     else
     {
-        if(close(i->backend_fd) != 0)
+        /* call script when closing file which was opened on the physical fs */
+        ret = call_script_simple("close", path);
+        if(ret == 0)
         {
-            ret = errno;
+            /* ok, the script let us close the file */
+            if(close(i->backend_fd) != 0)
+            {
+                ret = errno;
+            }
         }
+        /* return success or the error code from the script or from actual close() */
     }
     
     free(i);
