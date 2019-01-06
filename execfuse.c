@@ -518,17 +518,14 @@ static int execfuse_release(const char *path, struct fuse_file_info *fi)
     }
     else
     {
-        /* call script when closing file which was opened on the physical fs */
-        ret = call_script_simple("close", path);
-        if(ret == 0)
+        /* notify the script when closing a file which was opened on the physical fs */
+        call_script_simple("close", path);
+        /* ignore return code since fuse also ignores it, see https://libfuse.github.io/doxygen/structfuse__operations.html#a4a6f1b50c583774125b5003811ecebce */
+        
+        if(close(i->backend_fd) != 0)
         {
-            /* ok, the script let us close the file */
-            if(close(i->backend_fd) != 0)
-            {
-                ret = errno;
-            }
+            ret = errno;
         }
-        /* return success or the error code from the script or from actual close() */
     }
     
     free(i);
