@@ -1,0 +1,7 @@
+#!/bin/sh
+
+file="$2/$1"
+
+# You may do some cleanup task here on $file which is about to be closed.
+
+# return code ignored by fuse
