@@ -506,10 +506,6 @@ static int execfuse_release(const char *path, struct fuse_file_info *fi)
 
     int ret = 0;
     
-    /* notify the script when closing a file */
-    call_script_simple("close", path);
-    /* ignore return code since fuse also ignores it, see https://libfuse.github.io/doxygen/structfuse__operations.html#a4a6f1b50c583774125b5003811ecebce */
-    
     if(i->content)
     {
         if(i->file_was_written && !i->failed) {
@@ -527,6 +523,10 @@ static int execfuse_release(const char *path, struct fuse_file_info *fi)
             ret = errno;
         }
     }
+    
+    /* notify the script when a file is closed */
+    call_script_simple("closed", path);
+    /* ignore return code since fuse also ignores it, see https://libfuse.github.io/doxygen/structfuse__operations.html#a4a6f1b50c583774125b5003811ecebce */
     
     free(i);
 
