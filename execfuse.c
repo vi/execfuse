@@ -38,6 +38,7 @@ static int call_script_simple2(const char* script_name, const char* param1, cons
 static int call_script_simple3(const char* script_name, const char* param1,
                                const char* param2, const char* param3);
 static struct chunked_buffer* call_script_stdout(const char* script_name, const char* param);
+static struct chunked_buffer* call_script_stdout_ret(const char*, const char*, const char*, int*);
 
 
 
@@ -110,10 +111,11 @@ static int scanstat(const char* str, struct stat *stbuf) {
 
 static int execfuse_getattr(const char *path, struct stat *stbuf)
 {
+    int return_code;
     if(!path) return -ENOSYS;
     
-    struct chunked_buffer* r = call_script_stdout("getattr", path);
-    if(!r) return -ENOENT;
+    struct chunked_buffer* r = call_script_stdout_ret("getattr", path, NULL, &return_code);
+    if(!r) return -return_code;
     
     char buf[EXECFUSE_CHUNKSIZE];
     int ret = chunked_buffer_read(r, buf, EXECFUSE_CHUNKSIZE-1, 0);
@@ -133,13 +135,14 @@ static int execfuse_getattr(const char *path, struct stat *stbuf)
 static int execfuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                off_t offset, struct fuse_file_info *fi) {
 
+    int return_code;
     (void) offset;
     (void) fi;
 
     if(!path) return -ENOSYS;
     
-    struct chunked_buffer* r = call_script_stdout("readdir", path);
-    if(!r) return -EBADF;
+    struct chunked_buffer* r = call_script_stdout_ret("readdir", path, NULL, &return_code);
+    if(!r) return -return_code;
     
     long long int offset_ = 0;
 
@@ -168,8 +171,9 @@ static int execfuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 static int execfuse_readlink(const char *path, char *buf, size_t size)
 {
-    struct chunked_buffer* r = call_script_stdout("readlink", path);
-    if(!r) return -EBADF;
+    int return_code;
+    struct chunked_buffer* r = call_script_stdout_ret("readlink", path, NULL, &return_code);
+    if(!r) return -return_code;
     
     int size_to_copy = chunked_buffer_getlen(r);
     if(size_to_copy>size-1) size_to_copy = size-1;
