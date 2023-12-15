@@ -147,7 +147,7 @@ int execute_script(
     }
 	
     if(to_be_read!=-1) close(to_be_read);
-    if(to_be_written!=-1) close(to_be_read);
+    if(to_be_written!=-1) close(to_be_written);
     
     int status;
     waitpid(childpid, &status, 0);
