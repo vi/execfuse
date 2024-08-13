@@ -1,4 +1,6 @@
-#include <malloc.h>
+//#include <malloc.h>
+#include <stdlib.h>
+#include <stdio.h>
 #include <assert.h>
 
 #include <sys/select.h>

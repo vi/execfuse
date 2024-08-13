@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <string.h>
-#include <malloc.h>
+//#include <malloc.h>
+#include <stdlib.h>
 
 #include "common.h"
 #include "chunked_buffer.h"
