@@ -16,10 +16,10 @@ int mywrite(void* _, const char* buf, int len) {
 }
 
 int main(int argc, char* argv[]) {
-    
+
     write_t stdout_ = NULL;
     read_t stdin_ = NULL;
-    
+
     if(!getenv("NO_IN")) {
         //fcntl(0, F_SETFL, O_NONBLOCK);
         stdin_ = &myread;
@@ -27,11 +27,11 @@ int main(int argc, char* argv[]) {
     if(!getenv("NO_OUT")) {
         stdout_ = &mywrite;
     }
-    
+
     // dir script_name addargs firstarg in out
 
-    int ret = execute_script(argv[1], argv[2], (const char*const*)argv+3, NULL, 
+    int ret = execute_script(argv[1], argv[2], (const char*const*)argv+3, NULL,
                              stdin_, NULL, stdout_, NULL);
-    
-    return ret;   
+
+    return ret;
 }

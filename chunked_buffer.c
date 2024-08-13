@@ -27,7 +27,7 @@ void chunked_buffer_delete(struct chunked_buffer* c) {
     int i;
     if(c->buffers) {
         for(i=0; i<c->buffers_capacity; ++i) {
-            free(c->buffers[i]);   
+            free(c->buffers[i]);
         }
         free(c->buffers);
     }
@@ -44,9 +44,9 @@ static int chunked_buffer_write1(struct chunked_buffer* c, const char* buf, int 
     int offset_inside_buffer = offset % c->chunk_size;
     int size_to_be_written = c->chunk_size - offset_inside_buffer;
     if (size_to_be_written>len) size_to_be_written = len;
-    
+
     int i;
-    
+
     if (chunk_number >= c->buffers_capacity) {
         int saved_capacity = c->buffers_capacity;
         while(chunk_number >= c->buffers_capacity) {
@@ -58,23 +58,23 @@ static int chunked_buffer_write1(struct chunked_buffer* c, const char* buf, int 
             for(i=saved_capacity; i<c->buffers_capacity; ++i) c->buffers[i] = NULL;
         }
     }
-    
+
     if(!c->buffers) {
         c->buffers  = (char**) realloc(c->buffers, sizeof(char*) * c->buffers_capacity);
         assert(c->buffers != NULL);
         for(i=0; i<c->buffers_capacity; ++i) c->buffers[i] = NULL;
     }
-    
+
     if (!c->buffers[chunk_number]) {
         c->buffers[chunk_number] = (char*)malloc(c->chunk_size);
         assert(c->buffers[chunk_number]!=NULL);
         memset(c->buffers[chunk_number], 0, c->chunk_size);
     }
-    
+
     memmove(c->buffers[chunk_number]+offset_inside_buffer, buf, size_to_be_written);
-    
+
     if(c->total_len < offset + size_to_be_written) c->total_len = offset + size_to_be_written;
-    
+
     return size_to_be_written;
 }
 
@@ -99,36 +99,36 @@ static int chunked_buffer_read1(struct chunked_buffer* c, char* buf, int len, lo
     int offset_inside_buffer = offset % c->chunk_size;
     int size_to_be_read = c->chunk_size - offset_inside_buffer;
     if (size_to_be_read>len) size_to_be_read = len;
-    
+
     int return_zero = 0;
-    
+
     if (chunk_number >= c->buffers_capacity) {
         return_zero = 1;
     }
-    
+
     if(!c->buffers) {
         return_zero = 1;
     } else
     if (!c->buffers[chunk_number]) {
         return_zero = 1;
     }
-    
+
     if(return_zero) {
         memset(buf, 0, size_to_be_read);
         return size_to_be_read;
     }
-    
+
     memmove(buf, c->buffers[chunk_number]+offset_inside_buffer, size_to_be_read);
-    
+
     return size_to_be_read;
 }
 
 int chunked_buffer_read(struct chunked_buffer* c, char* buf, int len, long long int offset) {
     assert(offset>=0 && c!=NULL && buf!=NULL && len>=0);
-    
+
     if(c->total_len <= offset) return 0;
     if(len > c->total_len - offset) len = c->total_len - offset;
-    
+
     int accumul_len=0;
     int ret;
     while(len>0) {

@@ -10,6 +10,6 @@ execfuse: ${FILES} ${HEADERS}
 
 execfuse-static: ${FILES} ${HEADERS}
 		${CC} -static ${LDFLAGS} ${CFLAGS} ${FILES} $(shell pkg-config fuse --cflags --libs) -lpthread -lrt -ldl  -o execfuse-static
-		
+
 test:
 		bash tests.sh

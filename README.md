@@ -2,9 +2,9 @@ execfuse is a implement FUSE filesystems using a bunch of scripts.
 
 Consider it as a "shell FUSE binding".
 
-For each FUSE call (except of ones that deals with file descriptors) 
-execfuse calls your script. For opening files it provides a bit higher 
-level abstraction: "read_file" script is called when file should be read 
+For each FUSE call (except of ones that deals with file descriptors)
+execfuse calls your script. For opening files it provides a bit higher
+level abstraction: "read_file" script is called when file should be read
 and "write_file" is called when file should be saved.
 
 Example:
@@ -24,7 +24,7 @@ Example:
     (executes "exampels/xmp/write_file /tmp/12345" with content piped to stdin)
     $ rm -Rf m/tmp/1*
     $ fusermount -u m
-    
+
 Limitations:
 
 * Each file must fit in memory, can't write/read part of file
