@@ -236,13 +236,13 @@ static int call_script_simple3(const char* script_name, const char* param1,
     return call_script_ll(script_name, params, NULL, NULL, NULL, NULL);
 }
 
-struct chuncked_buffer_with_cursor {
+struct chunked_buffer_with_cursor {
     struct chunked_buffer *content;
     long long int offset;
 };
 
 static int call_script_stdout_write(void* ii, const char* buf, int len) {
-    struct chuncked_buffer_with_cursor* i = (struct chuncked_buffer_with_cursor*)ii;
+    struct chunked_buffer_with_cursor* i = (struct chunked_buffer_with_cursor*)ii;
     chunked_buffer_write(i->content, buf, len, i->offset);
     i->offset += len;
     return len;
@@ -250,7 +250,7 @@ static int call_script_stdout_write(void* ii, const char* buf, int len) {
 
 static struct chunked_buffer* call_script_stdout_ret(const char* script_name, const char* param1, const char* param2, int* call_return_code) {
     const char* params[]={param1, param2, NULL};
-    struct chuncked_buffer_with_cursor cbuf;
+    struct chunked_buffer_with_cursor cbuf;
     cbuf.offset = 0;
     cbuf.content = chunked_buffer_new(EXECFUSE_MAX_PATHLEN);
     int ret = call_script_ll(script_name
