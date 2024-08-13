@@ -15,10 +15,10 @@ typedef int (*write_t)(void* obj, const char *buf, int count);
  * appended_params and/or params can be NULL
  */
 int execute_script(
-                        const char* directory,
-						const char* script_name,
-						const char*const* appended_params,
-						const char*const* params,
-						read_t stdin_fn, void* stdin_obj,
-                        write_t stdout_fn, void* stdout_obj
-						);
+			const char* directory,
+			const char* script_name,
+			const char*const* appended_params,
+			const char*const* params,
+			read_t stdin_fn, void* stdin_obj,
+			write_t stdout_fn, void* stdout_obj
+			);
