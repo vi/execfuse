@@ -708,8 +708,14 @@ int main(int argc, char *argv[])
         perror("chdir");
         return 2;
     }
-    getcwd(working_directory, EXECFUSE_MAX_PATHLEN);
-    fchdir(cd);
+    if (!getcwd(working_directory, EXECFUSE_MAX_PATHLEN)) {
+        perror("getcwd");
+        return 2;
+    }
+    if (fchdir(cd) < 0) {
+        perror("chdir");
+        return 2;
+    }
     
     {
         char buf[64];
