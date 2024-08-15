@@ -2,11 +2,11 @@
 
 if [ "$1" = "/" ]; then
     echo 'ino=1 mode=drwxr-xr-x nlink=1 uid=0 gid=0 rdev=0 size=1224 blksize=512 blocks=2 atime=0 mtime=0 ctime=0 /'
-else  
+else
     true ${TMPDIR:="/tmp"}
     #VFS=$(<"$TMPDIR/video_frames.$EXECFUSE_PID/videoframesize")
     VFS=100000000 # sometimes misdetected and too small => chopped file
-    
+
     #if [ -e "$VFS" ]; then
         printf 'ino=1 mode=-r-xr-xr-x nlink=1 uid=0 gid=0 rdev=0 size='
         printf "%d" "$VFS"

@@ -31,6 +31,6 @@ for i in $KEYFRAMES; do
     printf 'ino=1 mode=-rwxr-xr-x nlink=1 uid=0 gid=0 rdev=0 size=%d' "$VFS"
     printf ' blksize=512 blocks=2 atime=0 mtime=0 ctime=0 %016.3f.ppm\0' $i
 done > "$KFL"
-    
+
 cat "$KFL"
 exit 0
