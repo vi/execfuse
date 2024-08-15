@@ -38,7 +38,7 @@ static int call_script_simple(const char* script_name, const char* param);
 static int call_script_simple2(const char* script_name, const char* param1, const char* param2);
 static int call_script_simple3(const char* script_name, const char* param1,
                                const char* param2, const char* param3);
-static struct chunked_buffer* call_script_stdout(const char* script_name, const char* param);
+static struct chunked_buffer* call_script_stdout_ret(const char*, const char*, const char*, int*);
 
 
 
@@ -118,14 +118,15 @@ static int execfuse_getattr(const char *path, struct stat *stbuf)
 {
 	struct chunked_buffer*	r = NULL;
 	int	ret;
+	int return_code = ENOENT;
 	char	buf[EXECFUSE_CHUNKSIZE];
 
 	if (!path)
 		return -ENOSYS;
 
-	r = call_script_stdout("getattr", path);
+	r = call_script_stdout_ret("getattr", path, NULL, &return_code);
 	if (!r)
-		return -ENOENT;
+		return -return_code;
 
 	ret = chunked_buffer_read(r, buf, EXECFUSE_CHUNKSIZE - 1, 0);
 	buf[ret] = 0;
@@ -145,17 +146,18 @@ static int execfuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 {
 	struct chunked_buffer*	r = NULL;
 	long long int	offset_ = 0;
+	int return_code = EBADF;
 
 	/* make-believe use of... */
 	(void) offset;
 	(void) fi;
 
 	if (!path)
-		return -ENOSYS;
+		return -return_code;
 
-	r = call_script_stdout("readdir", path);
+	r = call_script_stdout_ret("readdir", path, NULL, &return_code);
 	if (!r)
-		return -EBADF;
+		return -return_code;
 
 	for(;;) {
 		char	buf_[EXECFUSE_CHUNKSIZE];
@@ -184,11 +186,12 @@ static int execfuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 static int execfuse_readlink(const char *path, char *buf, size_t size)
 {
-	struct chunked_buffer*	r = call_script_stdout("readlink", path);
-	int	size_to_copy;
+	int size_to_copy;
+	int return_code = EBADF;
+	struct chunked_buffer*	r = call_script_stdout_ret("readlink", path, NULL, &return_code);
 
 	if (!r)
-		return -EBADF;
+		return -return_code;
 
 	size_to_copy = chunked_buffer_getlen(r);
 	if (size_to_copy > size - 1)
@@ -301,11 +304,6 @@ static struct chunked_buffer* call_script_stdout_ret(const char* script_name, co
 	}
 
 	return cbuf.content;
-}
-
-static struct chunked_buffer* call_script_stdout(const char* script_name, const char* param)
-{
-	return call_script_stdout_ret(script_name, param, NULL, NULL);
 }
 
 static int read_the_file_write(void* ii, const char* buf, int len)
