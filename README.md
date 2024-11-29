@@ -36,3 +36,10 @@ Filesystem examples:
 * `examples/xmp` - try to be fusexmp_fh
 * `examples/hello` - very simple demo filesystem
 * `examples/video_frames` - extract frames from video as `*.ppm` files and enumerate keyframes (using ffmpeg)
+
+# Buildroot instructions
+
+Execfuse is very useful on embedded tiny linuxsystems (which might have few a [shell]scripting languages instead of a fullblown c-compiler).
+
+1. put this repo into the 'packages`-folder (see buildroot manual)
+2. update the `EXECFUSE_SITE`-path accordingly.
