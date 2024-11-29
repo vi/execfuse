@@ -1,0 +1,5 @@
+config BR2_PACKAGE_EXECFUSE
+  bool "execfuse"
+  help
+    execfuse allows scriptable fuse filesystems [via awk/shellscript/micropython/lua e.g].
+    https://github.com/vi/execfuse
